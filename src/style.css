@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+/* ── Custom Theme ────────────────────────────────────────────── */
+@theme {
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* ── Base reset (dark terminal) ──────────────────────────────── */
+@layer base {
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    color: #ccc;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0;
+  }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #222; }
+  ::-webkit-scrollbar-thumb:hover { background: #444; }
+  canvas { image-rendering: pixelated; }
+}
+
+/* ── Color utilities (used dynamically in JS template strings) ── */
+@layer utilities {
+  .c-green { color: #00ff41; }
+  .c-red { color: #ff3333; }
+  .c-amber { color: #ff8c00; }
+  .c-cyan { color: #00bcd4; }
+  .c-blue { color: #4488ff; }
+  .c-purple { color: #bb86fc; }
+  .c-white { color: #ccc; }
+  .c-muted { color: #555; }
+  .mono { font-variant-numeric: tabular-nums; }
+}
+
+/* ── Animations ──────────────────────────────────────────────── */
+@keyframes flash-green { 0% { background: rgba(0,255,65,0.2); } 100% { background: transparent; } }
+@keyframes flash-red { 0% { background: rgba(255,51,51,0.2); } 100% { background: transparent; } }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.price-up { animation: flash-green 0.6s ease-out; }
+.price-down { animation: flash-red 0.6s ease-out; }
+
+/* ── Status dots ─────────────────────────────────────────────── */
+.status-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+.status-dot.loading { background: #ff8c00; animation: blink 1.2s infinite; }
+.status-dot.live { background: #00ff41; box-shadow: 0 0 3px #00ff41; }
+.status-dot.error { background: #ff3333; }
+.ws-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+.ws-dot.online { background: #00ff41; box-shadow: 0 0 3px #00ff41; }
+.ws-dot.connecting { background: #ff8c00; animation: blink 1.2s infinite; }
+.ws-dot.offline { background: #333; }
+.ws-live-dot { width: 4px; height: 4px; border-radius: 50%; display: inline-block; background: #333; margin-left: 4px; }
+.ws-live-dot.active { background: #00ff41; box-shadow: 0 0 3px #00ff41; }
+
+/* ── City row selected state ─────────────────────────────────── */
+.city-row.selected { background: #0a0a0a; border-left: 2px solid #ff8c00; }
+
+/* ── Custom Tooltip ──────────────────────────────────────────── */
+[title] { cursor: help; }
+.custom-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 99999;
+  background: #111;
+  border: 1px solid #ff8c00;
+  color: #ccc;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 6px 10px;
+  max-width: 300px;
+  pointer-events: none;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.6), 0 0 1px rgba(255,140,0,0.3);
+  word-wrap: break-word;
+  white-space: normal;
+}
+.custom-tooltip.visible { display: block; }
+
+/* ── Reasoning block ─────────────────────────────────────────── */
+pre.reasoning-block {
+  background: #0a0a0a;
+  padding: 8px;
+  font-size: 9px;
+  color: #444;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  overflow-y: auto;
+  max-height: 300px;
+}
+
+/* ── Mobile Responsive ───────────────────────────────────────── */
+
+/* Mobile sidebar: slide out from left */
+@media (max-width: 767px) {
+  html, body {
+    overflow: auto;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .mobile-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 85vw;
+    max-width: 320px;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: none;
+    will-change: transform;
+  }
+
+  .mobile-sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Make the main weather grid a flex column on mobile */
+  #tab-weather {
+    height: auto !important;
+    min-height: calc(100vh - 52px);
+    overflow: visible !important;
+  }
+
+  #col-center {
+    overflow: visible !important;
+    min-height: 0;
+  }
+
+  #col-right {
+    border-left: none !important;
+    border-top: 1px solid #222;
+    overflow: visible !important;
+    min-height: 0;
+  }
+
+  /* Enlarge tap targets for city rows */
+  .city-row {
+    min-height: 38px;
+  }
+
+  /* Ensure charts don't overflow */
+  canvas {
+    max-width: 100% !important;
+  }
+}

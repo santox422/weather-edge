@@ -1,0 +1,26 @@
+{
+  "name": "weather-edge",
+  "version": "1.0.0",
+  "description": "Weather forecasting analytics for Polymarket weather contract trading",
+  "type": "module",
+  "scripts": {
+    "start": "concurrently \"node server.js\" \"vite\"",
+    "dev": "concurrently \"node server.js\" \"vite\"",
+    "server": "node server.js",
+    "build": "vite build",
+    "analyze": "node strategy-analyzer/run.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "node-fetch": "^3.3.2",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "concurrently": "^9.0.0",
+    "tailwindcss": "^4.2.2",
+    "vite": "^5.4.0"
+  }
+}

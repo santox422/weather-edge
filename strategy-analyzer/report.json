@@ -1,0 +1,249 @@
+{
+  "summary": {
+    "positions": 191,
+    "events": 135,
+    "resolved": 130,
+    "winRate": "81.5%",
+    "realizedPnl": 14610.531660999999,
+    "roi": "125.9%"
+  },
+  "cityPerformance": [
+    {
+      "city": "london",
+      "events": 29,
+      "realizedPnl": 8914.009716000002,
+      "initialValue": 2091.839753819858,
+      "wins": 21,
+      "losses": 7
+    },
+    {
+      "city": "seoul",
+      "events": 2,
+      "realizedPnl": 1837.474208,
+      "initialValue": 0.004671576419,
+      "wins": 1,
+      "losses": 1
+    },
+    {
+      "city": "ankara",
+      "events": 11,
+      "realizedPnl": 943.2674520000003,
+      "initialValue": 0.030894547733,
+      "wins": 9,
+      "losses": 2
+    },
+    {
+      "city": "nyc",
+      "events": 21,
+      "realizedPnl": 663.3635250000001,
+      "initialValue": 0.067987964021,
+      "wins": 13,
+      "losses": 8
+    },
+    {
+      "city": "buenos aires",
+      "events": 9,
+      "realizedPnl": 546.8288259999999,
+      "initialValue": 2946.5374045187855,
+      "wins": 8,
+      "losses": 0
+    },
+    {
+      "city": "paris",
+      "events": 5,
+      "realizedPnl": 329.77771900000005,
+      "initialValue": 4972.919124254137,
+      "wins": 4,
+      "losses": 1
+    },
+    {
+      "city": "new york city",
+      "events": 2,
+      "realizedPnl": 282.160408,
+      "initialValue": 0.00068379709,
+      "wins": 2,
+      "losses": 0
+    },
+    {
+      "city": "munich",
+      "events": 4,
+      "realizedPnl": 272.506357,
+      "initialValue": 1589.3007383699999,
+      "wins": 2,
+      "losses": 1
+    },
+    {
+      "city": "atlanta",
+      "events": 9,
+      "realizedPnl": 268.53935500000006,
+      "initialValue": 0.013303552900000001,
+      "wins": 7,
+      "losses": 1
+    },
+    {
+      "city": "unknown",
+      "events": 9,
+      "realizedPnl": 244.367459,
+      "initialValue": 0.00877027056,
+      "wins": 9,
+      "losses": 0
+    },
+    {
+      "city": "sao paulo",
+      "events": 5,
+      "realizedPnl": 97.87124699999998,
+      "initialValue": 0.0005146501,
+      "wins": 5,
+      "losses": 0
+    },
+    {
+      "city": "chicago",
+      "events": 4,
+      "realizedPnl": 92.938398,
+      "initialValue": 0.000307007728,
+      "wins": 4,
+      "losses": 0
+    },
+    {
+      "city": "toronto",
+      "events": 4,
+      "realizedPnl": 43.658705,
+      "initialValue": 0.003594567011,
+      "wins": 4,
+      "losses": 0
+    },
+    {
+      "city": "seattle",
+      "events": 6,
+      "realizedPnl": 34.516189,
+      "initialValue": 0.0006971622,
+      "wins": 6,
+      "losses": 0
+    },
+    {
+      "city": "wellington",
+      "events": 5,
+      "realizedPnl": 17.719205,
+      "initialValue": 0.0004986,
+      "wins": 4,
+      "losses": 0
+    },
+    {
+      "city": "dallas",
+      "events": 5,
+      "realizedPnl": 15.652971000000003,
+      "initialValue": 6.56590319133,
+      "wins": 3,
+      "losses": 2
+    },
+    {
+      "city": "miami",
+      "events": 4,
+      "realizedPnl": 7.485036000000001,
+      "initialValue": 0.0003996,
+      "wins": 4,
+      "losses": 0
+    },
+    {
+      "city": "milan",
+      "events": 1,
+      "realizedPnl": -1.605115,
+      "initialValue": 0.000996948208,
+      "wins": 0,
+      "losses": 1
+    }
+  ],
+  "spread": {
+    "avgBrackets": 3.794701986754967,
+    "avgYes": 0.7731788079470199,
+    "avgNo": 3.2317880794701987,
+    "avgYesPrice": 0.6231762122329169,
+    "avgNoPrice": 0.976751146034174
+  },
+  "timing": {
+    "0-6h": 5152,
+    "6-12h": 6596,
+    "12-24h": 6742,
+    "24-48h": 1322,
+    "48h+": 3
+  },
+  "prices": {
+    "yes": {
+      "count": 2952,
+      "avg": 0.497,
+      "median": 0.41,
+      "min": 0.001,
+      "max": 0.999,
+      "volume": 356665.69
+    },
+    "no": {
+      "count": 15253,
+      "avg": 0.986,
+      "median": 0.999,
+      "min": 0.003,
+      "max": 0.999,
+      "volume": 3157751.46
+    }
+  },
+  "sells": {
+    "totalSells": 2052,
+    "yesSellCount": 1333,
+    "noSellCount": 719,
+    "yesSellVolume": 54373.22,
+    "noSellVolume": 92539.61,
+    "avgYesSellPrice": 0.706,
+    "avgNoSellPrice": 0.906
+  },
+  "topWinners": [
+    {
+      "city": "london",
+      "date": "1970-02-01",
+      "pnl": -2484.020094
+    },
+    {
+      "city": "nyc",
+      "date": "2026-03-07",
+      "pnl": -897.681727
+    },
+    {
+      "city": "london",
+      "date": "2026-02-15",
+      "pnl": -457.69465399999996
+    },
+    {
+      "city": "seoul",
+      "date": "1970-02-01",
+      "pnl": -452.789945
+    },
+    {
+      "city": "nyc",
+      "date": "2026-02-03",
+      "pnl": -364.56804
+    },
+    {
+      "city": "london",
+      "date": "2026-02-11",
+      "pnl": -352.286672
+    },
+    {
+      "city": "nyc",
+      "date": "2026-02-15",
+      "pnl": -207.301185
+    },
+    {
+      "city": "nyc",
+      "date": "2026-02-06",
+      "pnl": -125.140829
+    },
+    {
+      "city": "london",
+      "date": "2026-02-14",
+      "pnl": -95.12912
+    },
+    {
+      "city": "nyc",
+      "date": "2026-02-14",
+      "pnl": -94.728865
+    }
+  ]
+}
