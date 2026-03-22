@@ -4,7 +4,7 @@
   "description": "Weather forecasting analytics for Polymarket weather contract trading",
   "type": "module",
   "scripts": {
-    "start": "concurrently \"node server.js\" \"vite\"",
+    "start": "node server.js",
     "dev": "concurrently \"node server.js\" \"vite\"",
     "server": "node server.js",
     "build": "vite build",

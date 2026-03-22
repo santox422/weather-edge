@@ -13,7 +13,8 @@ let _recalcCryptoTimer = null;
 const RECALC_DEBOUNCE_MS = 2000;
 
 export function connectWebSocket() {
-  const wsUrl = `ws://${window.location.hostname}:3001/ws`;
+  const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${wsProto}//${window.location.host}/ws`;
   console.log('[WS] Connecting to', wsUrl);
   updateWsStatus('connecting');
 

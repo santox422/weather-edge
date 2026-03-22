@@ -6,6 +6,8 @@
 
 import express from 'express';
 import cors from 'cors';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { getCityMarkets, getCityMarketsMultiDay, HONDA_CITIES } from './src/services/polymarket-service.js';
@@ -17,7 +19,12 @@ import { PriceFeed } from './src/services/ws-price-feed.js';
 import { startBinanceWS } from './src/services/crypto-ws.js';
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
+
+// Serve built Vite frontend in production
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+app.use(express.static(join(__dirname, 'dist')));
 
 app.use(cors());
 app.use(express.json());
@@ -337,10 +344,14 @@ app.get('/api/ws-status', (req, res) => {
   });
 });
 
+// SPA catch-all — serve index.html for any non-API route
+app.get('*', (req, res) => {
+  res.sendFile(join(__dirname, 'dist', 'index.html'));
+});
+
 // Use server.listen instead of app.listen for WebSocket support
 server.listen(PORT, () => {
-  console.log(`\n[Weather Edge] Running on http://localhost:${PORT}`);
-  console.log(`[WebSocket] ws://localhost:${PORT}/ws`);
-  console.log(`[Dashboard] http://localhost:5173`);
+  console.log(`\n[Weather Edge] Running on port ${PORT}`);
+  console.log(`[WebSocket] ws://0.0.0.0:${PORT}/ws`);
   console.log(`[Cities] ${HONDA_CITIES.length}: ${HONDA_CITIES.map((c) => c.name).join(', ')}\n`);
 });
