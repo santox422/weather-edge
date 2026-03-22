@@ -7,7 +7,7 @@ import { getModelInfo } from '../analysis/model-registry.js';
 export function renderAtmospheric(data) {
   const atm = data.atmospheric;
   if (!atm) { $('atmospheric-grid').innerHTML = '<span class="text-[#333] text-[9px]">No data</span>'; return; }
-  $('atmospheric-grid').innerHTML = `<div class="grid grid-cols-4 gap-[1px] bg-[#222]">
+  $('atmospheric-grid').innerHTML = `<div class="grid grid-cols-4 gap-[1px] bg-[#222] mobile-grid-2">
     ${mTile('HUMIDITY', `${atm.humidity?.toFixed(0)??'--'}%`, 'c-cyan')}
     ${mTile('DEW PT', `${atm.dewPoint?.toFixed(1)??'--'}°C`, 'c-blue')}
     ${mTile('WIND', `${atm.windSpeed?.toFixed(0)??'--'} mph`, 'c-white')}
@@ -32,7 +32,7 @@ export function renderSkillMetrics(data, edge) {
     || '--';
   const isWeighted = data.multiModel?.consensus?.isWeighted;
 
-  $('skill-metrics').innerHTML = `<div class="grid grid-cols-3 gap-[1px] bg-[#222]">
+  $('skill-metrics').innerHTML = `<div class="grid grid-cols-3 gap-[1px] bg-[#222] mobile-grid-2">
     ${mTile('DAYS OUT', daysOut != null ? `${daysOut}d` : '--', daysColor)}
     ${mTile('SKILL', sk.pct, sk.cls)}
     ${mTile('GRADE', sk.grade, sk.cls)}
@@ -75,7 +75,7 @@ export function renderTrajectoryAndBias(data) {
   if (bias && bias.sampleSize > 0) {
     const biasColor = !bias.reliable ? 'c-muted' : bias.direction === 'warm' ? 'c-red' : bias.direction === 'cold' ? 'c-blue' : 'c-green';
     html += `<div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] mt-[1px]" title="Historical systematic error at the nearest weather station">STATION BIAS</div>`;
-    html += `<div class="grid grid-cols-4 gap-[1px] bg-[#222]">
+    html += `<div class="grid grid-cols-4 gap-[1px] bg-[#222] mobile-grid-2">
       ${mTile('BIAS', `${bias.bias > 0 ? '+' : ''}${bias.bias.toFixed(2)}°C`, biasColor)}
       ${mTile('STD', bias.stdDev != null ? `±${bias.stdDev.toFixed(2)}` : '--', 'c-muted')}
       ${mTile('N', `${bias.sampleSize}`, bias.reliable ? 'c-green' : 'c-amber')}
@@ -88,7 +88,7 @@ export function renderTrajectoryAndBias(data) {
     const region = data.modelConfig?.region || '—';
     const ensembleCount = data.modelConfig?.ensemble?.length || '?';
     html += `<div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] mt-[1px]" title="Ensemble model configuration and bracket probability method">ENSEMBLE KDE</div>`;
-    html += `<div class="grid grid-cols-4 gap-[1px] bg-[#222]">
+    html += `<div class="grid grid-cols-4 gap-[1px] bg-[#222] mobile-grid-2">
       ${mTile('MEMBERS', `${data.ensemble.memberCount}`, 'c-cyan')}
       ${mTile('SOURCES', `${ensembleCount}`, 'c-purple')}
       ${mTile('BW', '0.5°C', 'c-muted')}
@@ -138,7 +138,7 @@ export function renderAirQuality(data) {
   if (!aq) { $('airquality-grid').innerHTML = '<span class="text-[#333] text-[9px]">No data</span>'; return; }
   const aqiColor = aq.usAqi <= 50 ? 'c-green' : aq.usAqi <= 100 ? 'c-amber' : 'c-red';
   const uvColor = aq.uvIndex <= 2 ? 'c-green' : aq.uvIndex <= 5 ? 'c-amber' : 'c-red';
-  $('airquality-grid').innerHTML = `<div class="grid grid-cols-4 gap-[1px] bg-[#222]">
+  $('airquality-grid').innerHTML = `<div class="grid grid-cols-4 gap-[1px] bg-[#222] mobile-grid-2">
     ${mTile('AQI', aq.usAqi!=null?aq.usAqi.toFixed(0):'--', aqiColor)}
     ${mTile('UV', aq.uvIndex!=null?aq.uvIndex.toFixed(1):'--', uvColor)}
     ${mTile('PM2.5', aq.pm25!=null?aq.pm25.toFixed(1):'--', 'c-muted')}

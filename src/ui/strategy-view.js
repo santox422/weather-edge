@@ -95,7 +95,7 @@ export function renderTradingStrategy(data) {
   }
 
   // Summary
-  html += `<div class="mt-[2px]"><div class="grid grid-cols-4 gap-[1px] bg-[#222]">
+  html += `<div class="mt-[2px]"><div class="grid grid-cols-4 gap-[1px] bg-[#222] strat-summary-grid">
     ${mTile('WIN', `${strat.summary.winProbability}%`, strat.summary.winProbability > 70 ? 'c-green' : strat.summary.winProbability > 40 ? 'c-amber' : 'c-red')}
     ${mTile('E[R]', `${strat.summary.expectedReturn > 0 ? '+' : ''}${strat.summary.expectedReturn}%`, strat.summary.expectedReturn > 0 ? 'c-green' : 'c-red')}
     ${mTile('MAX↓', `-${strat.summary.maxDrawdown}%`, 'c-red')}
@@ -110,7 +110,7 @@ export function renderTradingStrategy(data) {
     <div class="bg-[#ff3333]" style="width:${strat.summary.totalNoPct/total*100}%" title="NO ${strat.summary.totalNoPct}%"></div>
     <div class="bg-[#ff8c00]" style="width:${strat.summary.totalLongshotPct/total*100}%" title="LONG ${strat.summary.totalLongshotPct}%"></div>
   </div>`;
-  html += `<div class="flex items-center gap-2 px-2 py-[3px] text-[8px] text-[#666]">
+  html += `<div class="flex items-center gap-2 px-2 py-[3px] text-[8px] text-[#666] alloc-legend">
     <span class="c-green" title="Capital allocated to conviction YES bets">■</span> YES ${strat.summary.totalYesPct}%
     ${fPct > 0 ? `<span class="c-purple" title="Capital allocated to fading overpriced brackets">■</span> FADE ${fPct}%` : ''}
     <span class="c-red" title="Capital allocated to safe NO premium bets">■</span> NO ${strat.summary.totalNoPct}%
@@ -131,7 +131,7 @@ export function renderTradingStrategy(data) {
 }
 
 function stratTable(headers) {
-  return `<div class="text-[8px]"><div class="grid grid-cols-7 gap-0 px-2 py-[2px] border-b border-[#111]">${headers.map(h => {
+  return `<div class="text-[8px] strat-table-wrap"><div class="grid grid-cols-7 gap-0 px-2 py-[2px] border-b border-[#111] min-w-[340px]">${headers.map(h => {
     const tip = TOOLTIPS[h] || '';
     const titleAttr = tip ? ` title="${tip}"` : '';
     return `<span class="${h === headers[0] ? 'text-left' : 'text-right'} text-[#333] font-bold uppercase"${titleAttr}>${h}</span>`;
@@ -139,5 +139,5 @@ function stratTable(headers) {
 }
 
 function stratRow(cls, cells) {
-  return `<div class="grid grid-cols-7 gap-0 px-2 py-[1px] border-b border-[#0a0a0a] hover:bg-[#0a0a0a] transition-colors ${cls}">${cells.map((c, i) => `<span class="${i === 0 ? 'text-left text-[#ccc] truncate' : 'text-right'} text-[9px]">${c}</span>`).join('')}</div>`;
+  return `<div class="grid grid-cols-7 gap-0 px-2 py-[1px] border-b border-[#0a0a0a] hover:bg-[#0a0a0a] transition-colors min-w-[340px] ${cls}">${cells.map((c, i) => `<span class="${i === 0 ? 'text-left text-[#ccc] truncate' : 'text-right'} text-[9px]">${c}</span>`).join('')}</div>`;
 }

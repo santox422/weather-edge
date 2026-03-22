@@ -194,6 +194,11 @@ window.analyzeCity = async function (slug, dateStr) {
   const cityName = (city?.name || slug).toUpperCase();
   const dateLabel = fmtDateLabel(dateStr);
   $('inst-name').textContent = `${cityName} // ${dateLabel} // TEMP`;
+  const mobileInst = $('inst-name-mobile');
+  if (mobileInst) {
+    mobileInst.textContent = `${cityName} // ${dateLabel}`;
+    $('mobile-inst-bar').style.display = '';
+  }
 
   $('edge-grid').innerHTML = `<div class="flex flex-col items-center justify-center py-8"><span class="text-[#ff8c00] text-[10px] font-bold animate-pulse">[RUNNING ANALYSIS...]</span><span class="text-[#333] text-[9px]">Fetching GFS, ECMWF, ICON, JMA, GEM, ensemble data...</span></div>`;
   $('outcomes-list').innerHTML = '';

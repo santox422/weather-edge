@@ -95,8 +95,6 @@ pre.reasoning-block {
 }
 
 /* ── Mobile Responsive ───────────────────────────────────────── */
-
-/* Mobile sidebar: slide out from left */
 @media (max-width: 767px) {
   html, body {
     overflow-y: auto;
@@ -105,6 +103,7 @@ pre.reasoning-block {
     min-height: 100vh;
   }
 
+  /* ── Sidebar ── */
   .mobile-sidebar {
     position: fixed;
     top: 0;
@@ -118,18 +117,17 @@ pre.reasoning-block {
     box-shadow: none;
     will-change: transform;
   }
-
   .mobile-sidebar.open {
     transform: translateX(0);
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.6);
   }
 
-  /* Switch from fixed-height grid to natural document flow on mobile */
+  /* ── Main layout: natural document flow ── */
   #tab-weather {
     display: flex !important;
     flex-direction: column;
     height: auto !important;
-    min-height: calc(100vh - 52px);
+    min-height: calc(100vh - 80px);
     overflow: visible !important;
   }
 
@@ -149,7 +147,7 @@ pre.reasoning-block {
     min-height: 0;
   }
 
-  /* Ensure analysis content and nested grids don't clip */
+  /* ── Prevent content clipping ── */
   #analysis-content,
   #panel-row-data,
   #panel-brackets,
@@ -160,18 +158,64 @@ pre.reasoning-block {
     z-index: 1;
   }
 
-  /* Stack bracket and strategy panels vertically on mobile */
-  #panel-row-data {
+  /* ── Stack data panels vertically on mobile ── */
+  #panel-row-data,
+  #panel-row-charts {
     grid-template-columns: 1fr !important;
   }
 
-  /* Enlarge tap targets for city rows */
+  /* ── Metric grids: 2 columns on small screens ── */
+  .mobile-grid-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ── Strategy & outcome tables: horizontal scroll ── */
+  .strat-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── Enlarge tap targets ── */
   .city-row {
     min-height: 38px;
   }
 
-  /* Ensure charts don't overflow */
+  /* ── Charts ── */
   canvas {
     max-width: 100% !important;
+  }
+
+  /* ── Header tweaks ── */
+  #terminal-header {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  /* ── Mobile instrument bar (shown below header) ── */
+  #mobile-inst-bar {
+    display: block !important;
+  }
+
+  /* ── Better touch padding on panels ── */
+  #panel-signal {
+    padding: 8px !important;
+  }
+
+  /* ── Strategy summary grid ── */
+  .strat-summary-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ── Portfolio allocation legend: wrap ── */
+  .alloc-legend {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+
+  /* ── Polymarket trade button: full width on mobile ── */
+  #btn-polymarket {
+    width: 100%;
+    justify-content: center;
+    margin-top: 6px;
   }
 }

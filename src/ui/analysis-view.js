@@ -16,7 +16,7 @@ export function renderAnalysis(data, city, marketOverride, { priceUpdateOnly = f
     if (div?.isDivergent) {
       $('card-divergence').style.display = 'block';
       $('divergence-text').textContent = div.summary || `GFS/ECMWF disagree by ${div.difference?.toFixed(1)}°C`;
-      $('div-grid').innerHTML = `<div class="grid grid-cols-4 gap-[1px] bg-[#222]">
+      $('div-grid').innerHTML = `<div class="grid grid-cols-4 gap-[1px] bg-[#222] mobile-grid-2">
         ${mTile('GFS', `${div.gfsTemp?.toFixed(1)||'--'}°C`, 'c-blue')}
         ${mTile('ECMWF', `${div.ecmwfTemp?.toFixed(1)||'--'}°C`, 'c-cyan')}
         ${mTile('DELTA', `${div.difference?.toFixed(1)||'--'}°C`, 'c-amber')}
@@ -61,7 +61,7 @@ export function renderAnalysis(data, city, marketOverride, { priceUpdateOnly = f
       </div>
       ${polyBtnHtml}
     </div>
-    <div class="grid grid-cols-3 gap-[1px] mt-[6px] bg-[#222]">
+    <div class="grid grid-cols-3 gap-[1px] mt-[6px] bg-[#222] mobile-grid-2">
       ${metricCell('ADJ. EDGE', fmtEdge(e.adjustedEdge), edgeColor(e.adjustedEdge))}
       ${metricCell('CONFIDENCE', `${e.confidence || '--'}%`, 'c-amber')}
       ${metricCell('SIGNAL', (e.signal || '--').replace(/_/g, ' '), signalColor(e.signal))}
