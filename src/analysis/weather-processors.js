@@ -119,7 +119,7 @@ export function processMultiModelData(modelResults, market, modelWeights = null)
   });
 
   let consensus = null;
-  if (market.threshold && market.marketType === 'temperature') {
+  if (market.marketType === 'temperature') {
     const targetDate = market.endDate
       ? new Date(market.endDate).toISOString().split('T')[0]
       : null;
@@ -130,24 +130,42 @@ export function processMultiModelData(modelResults, market, modelWeights = null)
       return {
         model: mf.model,
         maxTemp: mf.maxTemps[idx],
-        exceedsThreshold: mf.maxTemps[idx] >= market.threshold,
         weight: mf.weight,
       };
-    });
+    }).filter((p) => p.maxTemp != null);
 
-    // Weighted agreement: high-res models count proportionally more
-    const totalWeight = modelPredictions.reduce((s, p) => s + p.weight, 0);
-    const agreeWeight = modelPredictions
-      .filter((p) => p.exceedsThreshold)
-      .reduce((s, p) => s + p.weight, 0);
+    if (modelPredictions.length > 0) {
+      // Compute weighted median of model predictions
+      const sorted = [...modelPredictions].sort((a, b) => a.maxTemp - b.maxTemp);
+      const totalWt = sorted.reduce((s, p) => s + p.weight, 0);
+      let cumWt = 0;
+      let medianTemp = sorted[Math.floor(sorted.length / 2)].maxTemp;
+      for (const p of sorted) {
+        cumWt += p.weight;
+        if (cumWt >= totalWt / 2) { medianTemp = p.maxTemp; break; }
+      }
 
-    consensus = {
-      agreementRatio: totalWeight > 0 ? agreeWeight / totalWeight : 0,
-      predictions: modelPredictions,
-      allAgree: agreeWeight === totalWeight || agreeWeight === 0,
-      modelCount: modelPredictions.length,
-      isWeighted: modelWeights != null,
-    };
+      // Mark each model: within ±1.5°C of median = in consensus
+      for (const p of modelPredictions) {
+        p.deviation = p.maxTemp - medianTemp;
+        p.inConsensus = Math.abs(p.deviation) <= 1.5;
+        // Keep exceedsThreshold for backward compat (uses median as reference)
+        p.exceedsThreshold = p.inConsensus;
+      }
+
+      const agreeWeight = modelPredictions
+        .filter((p) => p.inConsensus)
+        .reduce((s, p) => s + p.weight, 0);
+
+      consensus = {
+        agreementRatio: totalWt > 0 ? agreeWeight / totalWt : 0,
+        predictions: modelPredictions,
+        allAgree: agreeWeight === totalWt,
+        modelCount: modelPredictions.length,
+        isWeighted: modelWeights != null,
+        medianTemp,
+      };
+    }
   }
 
   return { models: modelForecasts, consensus };

@@ -16,7 +16,7 @@ export const TOOLTIPS = {
   'DAYS OUT': 'Days until market resolution. Shorter lead time = higher forecast accuracy.',
   'SKILL': 'Estimated forecast accuracy percentage based on lead time. Decays with longer horizons.',
   'GRADE': 'Forecast reliability grade from A+ (1d out, ~95% accurate) to F (14d+, <20% accurate).',
-  'CRPS': 'Continuous Ranked Probability Score. Measures how well-calibrated the ensemble is. Lower = better. <2 is good.',
+  'ENS CAL': 'Ensemble Calibration Score. Measures ensemble spread quality. 2-4 = well-calibrated (green), <2 = suspiciously tight/overconfident (amber), >4 = wide/uncertain (red).',
   'SPREAD': 'Average spread across ensemble members. Higher spread = more uncertainty in the forecast.',
   'CONSENSUS': 'Percentage of independent weather models agreeing on which bracket the temperature falls in.',
   'HUMIDITY': 'Relative humidity (%) at the forecast location. High humidity can suppress max temperature.',
@@ -62,13 +62,13 @@ export const TOOLTIPS = {
 // ─── HTML helpers ─────────────────────────────────────────────
 export function mTile(label, value, colorClass = 'c-white') {
   const tip = TOOLTIPS[label] || '';
-  const titleAttr = tip ? ` title="${tip}"` : '';
+  const titleAttr = tip ? ` data-tip="${tip}"` : '';
   return `<div class="bg-[#0a0a0a] p-[4px_6px] cursor-help"${titleAttr}><div class="text-[7px] text-[#444] uppercase tracking-[0.12em] font-semibold">${label}</div><div class="text-[11px] font-bold mt-[1px] ${colorClass}">${value}</div></div>`;
 }
 
 export function metricCell(label, value, colorClass = 'c-white') {
   const tip = TOOLTIPS[label] || '';
-  const titleAttr = tip ? ` title="${tip}"` : '';
+  const titleAttr = tip ? ` data-tip="${tip}"` : '';
   return `<div class="bg-[#0a0a0a] p-[4px_6px] cursor-help"${titleAttr}><div class="text-[7px] text-[#444] uppercase tracking-[0.15em]">${label}</div><div class="text-[12px] font-bold mt-[1px] ${colorClass}">${value}</div></div>`;
 }
 

@@ -14,13 +14,13 @@
 
   <!-- ── Terminal Header Bar ──────────────────────────────────── -->
   <header class="flex flex-wrap items-center justify-between min-h-[28px] px-2.5 py-1 bg-[#0a0a0a] border-b border-[#222] gap-y-1" id="terminal-header">
-    <div class="flex items-center gap-[6px]" title="Analytics terminal for Polymarket">
-      <button class="md:hidden bg-transparent border border-[#333] text-[#ff8c00] text-[10px] font-bold px-1.5 py-[1px] cursor-pointer" id="btn-mobile-menu" title="Toggle markets panel">☰</button>
+    <div class="flex items-center gap-[6px]" data-tip="Analytics terminal for Polymarket">
+      <button class="md:hidden bg-transparent border border-[#333] text-[#ff8c00] text-[10px] font-bold px-1.5 py-[1px] cursor-pointer" id="btn-mobile-menu" data-tip="Toggle markets panel">☰</button>
       <span class="text-[11px] font-extrabold text-[#ff8c00] tracking-[0.05em]">POLYMARKET EDGE</span>
       <span class="text-[#222] hidden sm:inline">│</span>
       <span class="text-[8px] text-[#555] tracking-wider hidden sm:inline">Analytics Terminal</span>
     </div>
-    <div class="hidden sm:flex items-center gap-1 text-[9px] text-[#888]" id="instrument-bar" title="Currently selected city, date, and market type">
+    <div class="hidden sm:flex items-center gap-1 text-[9px] text-[#888]" id="instrument-bar" data-tip="Currently selected city, date, and market type">
       <span id="inst-name">—</span>
     </div>
     <div class="sm:hidden text-[8px] text-[#888] truncate max-w-[50vw]" id="mobile-inst-bar" style="display:none;">
@@ -32,15 +32,15 @@
         <div class="text-[#333]">│</div>
         <div><span class="text-[#555]">GER </span><span id="clock-ger" class="text-[#fff] font-bold">--:--:--</span></div>
       </div>
-      <div class="flex items-center gap-1" id="ws-indicator" title="WebSocket connection to Polymarket CLOB for live price updates">
+      <div class="flex items-center gap-1" id="ws-indicator" data-tip="WebSocket connection to Polymarket CLOB for live price updates">
         <span class="ws-dot offline" id="ws-dot"></span>
         <span class="text-[#555] text-[8px] hidden sm:inline" id="ws-label">WS OFF</span>
       </div>
-      <div class="flex items-center gap-1" id="status-indicator" title="Current system status: INIT = loading, LIVE = connected, OFFLINE = error">
+      <div class="flex items-center gap-1" id="status-indicator" data-tip="Current system status: INIT = loading, LIVE = connected, OFFLINE = error">
         <span class="status-dot loading"></span>
         <span class="status-text text-[#555] text-[8px] hidden sm:inline">INIT</span>
       </div>
-      <button class="bg-transparent border border-[#222] text-[#555] text-[8px] font-bold px-2 py-[2px] cursor-pointer hover:border-[#ff8c00] hover:text-[#ff8c00] transition-colors uppercase tracking-wider" id="btn-refresh" title="Force refresh all market data and re-run analysis if a city is selected">REFRESH</button>
+      <button class="bg-transparent border border-[#222] text-[#555] text-[8px] font-bold px-2 py-[2px] cursor-pointer hover:border-[#ff8c00] hover:text-[#ff8c00] transition-colors uppercase tracking-wider" id="btn-refresh" data-tip="Force refresh all market data and re-run analysis if a city is selected">REFRESH</button>
     </div>
   </header>
 
@@ -62,7 +62,7 @@
 
     <!-- ═══ LEFT COLUMN: Watchlist ═══ -->
     <aside class="mobile-sidebar flex flex-col overflow-hidden border-r border-[#111] bg-[#050505]" id="col-left">
-      <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] flex items-center justify-between gap-1.5" title="Active Polymarket temperature markets across 16 cities worldwide">
+      <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] flex items-center justify-between gap-1.5" data-tip="Active Polymarket temperature markets across 16 cities worldwide">
         <span>MARKETS<span class="text-[#333]" id="market-count"></span></span>
         <button class="md:hidden text-[#555] text-[12px] cursor-pointer hover:text-[#ff8c00]" id="btn-close-sidebar">✕</button>
       </div>
@@ -91,7 +91,7 @@ Analysis includes: ensemble spread, GFS/ECMWF divergence, 6-model consensus, for
         <div class="bg-[#050505] border-b border-[#111] p-2" id="panel-signal">
           <div id="edge-grid"></div>
           <div class="mt-[6px] p-2 border border-[#ff333344] bg-[#ff333308]" id="card-divergence" style="display:none;">
-            <div class="text-[9px] font-bold text-[#ff3333] uppercase tracking-wider" title="GFS and ECMWF models disagree significantly on max temperature. Large divergence adds uncertainty.">⚠ MODEL DIVERGENCE</div>
+            <div class="text-[9px] font-bold text-[#ff3333] uppercase tracking-wider" data-tip="GFS and ECMWF models disagree significantly on max temperature. Large divergence adds uncertainty.">⚠ MODEL DIVERGENCE</div>
             <div class="text-[9px] text-[#888] mt-[2px]" id="divergence-text"></div>
             <div class="mt-[4px]" id="div-grid"></div>
           </div>
@@ -100,11 +100,11 @@ Analysis includes: ensemble spread, GFS/ECMWF divergence, 6-model consensus, for
         <!-- Row 2: Brackets + Strategy side by side -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-[1px]" id="panel-row-data">
           <div class="bg-[#050505]" id="panel-brackets">
-            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" title="All temperature brackets for this market with forecast vs. market probabilities and your edge on each">BRACKET OUTCOMES</div>
+            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" data-tip="All temperature brackets for this market with forecast vs. market probabilities and your edge on each">BRACKET OUTCOMES</div>
             <div id="outcomes-list"></div>
           </div>
           <div class="bg-[#050505]" id="panel-strategy">
-            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] flex items-center gap-1.5" title="Kelly Criterion position sizing — optimal allocation based on edge size and confidence level">TRADING STRATEGY <span class="text-[7px] border border-[#ff8c00] px-1 py-[1px] text-[#ff8c00]" title="Kelly Criterion — mathematically optimal bet sizing formula that maximizes long-term growth">KELLY</span></div>
+            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] flex items-center gap-1.5" data-tip="Kelly Criterion position sizing — optimal allocation based on edge size and confidence level">TRADING STRATEGY <span class="text-[7px] border border-[#ff8c00] px-1 py-[1px] text-[#ff8c00]" data-tip="Kelly Criterion — mathematically optimal bet sizing formula that maximizes long-term growth">KELLY</span></div>
             <div id="strategy-panel"></div>
           </div>
         </div>
@@ -112,11 +112,11 @@ Analysis includes: ensemble spread, GFS/ECMWF divergence, 6-model consensus, for
         <!-- Row 3: Charts side by side -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-[1px]" id="panel-row-charts">
           <div class="bg-[#050505]">
-            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" title="Temperature distribution from 50+ ensemble members over time. Shows P10-P90 range with market thresholds overlaid.">ENSEMBLE FORECAST</div>
+            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" data-tip="Temperature distribution from 50+ ensemble members over time. Shows P10-P90 range with market thresholds overlaid.">ENSEMBLE FORECAST</div>
             <div class="h-[200px] p-1"><canvas id="chart-ensemble"></canvas></div>
           </div>
           <div class="bg-[#050505]">
-            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" title="Max temperature predictions from 6 independent weather models. Green = exceeds threshold, Red = below.">MULTI-MODEL COMPARISON</div>
+            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" data-tip="Max temperature predictions from 6 independent weather models. Green = exceeds threshold, Red = below.">MULTI-MODEL COMPARISON</div>
             <div id="model-bars"></div>
           </div>
         </div>
@@ -124,12 +124,12 @@ Analysis includes: ensemble spread, GFS/ECMWF divergence, 6-model consensus, for
         <!-- Row 4: Base Rate + Reasoning -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-[1px]">
           <div class="bg-[#050505]">
-            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" title="How often this temperature threshold was exceeded historically on this date over the past 30 years.">HISTORICAL BASE RATE</div>
+            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" data-tip="How often this temperature threshold was exceeded historically on this date over the past 30 years.">HISTORICAL BASE RATE</div>
             <div class="h-[120px] p-1"><canvas id="chart-history"></canvas></div>
             <p id="baserate-text" class="text-[10px] text-[#888] mt-1 px-2"></p>
           </div>
           <div class="bg-[#050505]">
-            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" title="Detailed text log of the analysis reasoning, including bracket breakdown, skill assessment, and model divergence notes.">ANALYSIS LOG</div>
+            <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" data-tip="Detailed text log of the analysis reasoning, including bracket breakdown, skill assessment, and model divergence notes.">ANALYSIS LOG</div>
             <pre class="reasoning-block" id="reasoning-text"></pre>
           </div>
         </div>
@@ -141,12 +141,12 @@ Analysis includes: ensemble spread, GFS/ECMWF divergence, 6-model consensus, for
 
       <!-- Metrics Stack -->
       <div>
-        <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" title="Key forecast quality indicators: lead time, skill grade, CRPS calibration, ensemble spread, and model consensus.">FORECAST METRICS</div>
+        <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" data-tip="Key forecast quality indicators: lead time, skill grade, CRPS calibration, ensemble spread, and model consensus.">FORECAST METRICS</div>
         <div id="skill-metrics"></div>
       </div>
 
       <div>
-        <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" title="Current atmospheric conditions at the forecast location. These affect max temperature predictions.">ATMOSPHERIC</div>
+        <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" data-tip="Current atmospheric conditions at the forecast location. These affect max temperature predictions.">ATMOSPHERIC</div>
         <div id="atmospheric-grid"></div>
       </div>
 
@@ -155,13 +155,13 @@ Analysis includes: ensemble spread, GFS/ECMWF divergence, 6-model consensus, for
       </div>
 
       <div>
-        <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" title="Air quality index and UV conditions.">AIR QUALITY / UV</div>
+        <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" data-tip="Air quality index and UV conditions.">AIR QUALITY / UV</div>
         <div id="airquality-grid"></div>
       </div>
 
       <!-- Live Price Ticker -->
       <div class="flex-1 flex flex-col min-h-0">
-        <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] flex items-center" title="Real-time price updates from Polymarket CLOB WebSocket. Shows bid/ask spread and price changes.">LIVE PRICES <span class="ws-live-dot" id="ticker-dot"></span></div>
+        <div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] flex items-center" data-tip="Real-time price updates from Polymarket CLOB WebSocket. Shows bid/ask spread and price changes.">LIVE PRICES <span class="ws-live-dot" id="ticker-dot"></span></div>
         <div class="flex-1 overflow-y-auto px-2 py-1 text-[9px]" id="ticker-feed">
           <span class="ticker-placeholder text-[#333] text-[9px]">Waiting for WebSocket...</span>
         </div>
@@ -196,7 +196,7 @@ Analysis includes: ensemble spread, GFS/ECMWF divergence, 6-model consensus, for
         
         <div id="ofi-container" style="display: none;" class="flex flex-col gap-1 w-full">
           <div class="flex justify-between items-center">
-            <span class="text-[9px] text-[#888] font-bold tracking-widest uppercase" title="Order Flow Imbalance — Live Bid vs Ask volume pressure (Top 10 Levels)">Live OFI (10Hz)</span>
+            <span class="text-[9px] text-[#888] font-bold tracking-widest uppercase" data-tip="Order Flow Imbalance — Live Bid vs Ask volume pressure (Top 10 Levels)">Live OFI (10Hz)</span>
             <span class="text-[12px] font-black" id="ofi-value">0.00</span>
           </div>
           <div class="h-2 w-full bg-[#222] flex overflow-hidden border border-[#111] relative mt-1">

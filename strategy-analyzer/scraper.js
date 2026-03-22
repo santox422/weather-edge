@@ -63,6 +63,9 @@ export function parseWeatherTitle(title, slug, timestamp) {
     const [, city, tempLow, tempHigh, unit, monthName, day] = titleMatch;
     const date = new Date(timestamp * 1000);
     const year = date.getFullYear();
+    // Reject dates before 2024 — prevents epoch-derived dates like "1970-02-01"
+    // when timestamp is 0 or otherwise invalid
+    if (year < 2024) return null;
     const monthNum = monthToNum(monthName);
     if (!monthNum) return null;
     const isOrHigher = title.toLowerCase().includes('or higher');

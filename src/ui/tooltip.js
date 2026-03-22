@@ -1,26 +1,36 @@
 /**
  * Custom tooltip system — simple, reliable, event-delegation based.
- * Reads [title] attributes without removing them (avoids DOM churn).
- * The native browser tooltip delay (~500ms) rarely conflicts.
+ * All tooltips use [data-tip] exclusively (never [title]) so the browser
+ * never fires its native tooltip. No race condition, no double-tooltip.
  */
 export function initTooltips() {
   const tip = document.getElementById('custom-tooltip');
   if (!tip) return;
 
+  // Strip any native title attrs from data-tip elements so the browser
+  // never fires its built-in delayed tooltip alongside our custom one.
+  function stripTitles(root) {
+    (root || document).querySelectorAll('[data-tip][title]').forEach((el) => el.removeAttribute('title'));
+  }
+  stripTitles();
+  new MutationObserver((muts) => {
+    for (const m of muts) m.addedNodes.forEach((n) => { if (n.nodeType === 1) stripTitles(n.parentElement || document); });
+  }).observe(document.body, { childList: true, subtree: true });
+
   let isVisible = false;
+  let activeEl = null;
 
   document.addEventListener('mouseover', (e) => {
-    const el = e.target.closest('[title]');
+    const el = e.target.closest('[data-tip]');
     if (!el) {
-      if (isVisible) {
-        tip.classList.remove('visible');
-        isVisible = false;
-      }
+      hideTooltip();
       return;
     }
 
-    const text = el.getAttribute('title');
+    const text = el.getAttribute('data-tip');
     if (!text) return;
+
+    activeEl = el;
 
     tip.textContent = text;
     if (!isVisible) {
@@ -35,23 +45,27 @@ export function initTooltips() {
   });
 
   document.addEventListener('mouseout', (e) => {
-    const el = e.target.closest('[title]');
+    const el = e.target.closest('[data-tip]');
     if (!el) return;
 
-    // Only hide if the mouse isn't entering a child or the element itself
     const related = e.relatedTarget;
     if (related && el.contains(related)) return;
 
+    hideTooltip();
+  });
+
+  function hideTooltip() {
+    if (!isVisible) return;
     tip.classList.remove('visible');
     isVisible = false;
-  });
+    activeEl = null;
+  }
 
   function positionTooltip(e) {
     const pad = 14;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    // Position at 0,0 first to measure, then move
     tip.style.left = '0px';
     tip.style.top = '0px';
 

@@ -126,11 +126,18 @@ export async function getMultiModelForecast(lat, lon, days = 7, models = null) {
         models: model,
       });
 
-      const res = await fetch(`${BASE_FORECAST}?${params}`);
+      const res = await throttledFetch(`${BASE_FORECAST}?${params}`);
       if (!res.ok) throw new Error(`Forecast API error for ${model}: ${res.status}`);
       return { model, data: await res.json() };
     })
   );
+
+  // Log dropped models so failures are visible
+  for (const r of results) {
+    if (r.status === 'rejected') {
+      console.log(`[WARN] Multi-model request failed: ${r.reason?.message || r.reason}`);
+    }
+  }
 
   // Only return successful results — some models may not cover all locations
   return results
@@ -152,7 +159,7 @@ export async function getEnsemble(lat, lon, models = ['gfs025', 'ecmwf_ifs025', 
     models: models.join(','),
   });
 
-  const res = await fetch(`${BASE_ENSEMBLE}?${params}`);
+  const res = await throttledFetch(`${BASE_ENSEMBLE}?${params}`);
   if (!res.ok) throw new Error(`Ensemble API error: ${res.status} ${await res.text()}`);
   return res.json();
 }
@@ -321,8 +328,13 @@ export async function getHistoricalBaseRate(lat, lon, month, day, yearsBack = 30
 }
 
 /**
- * Get forecast trajectory — how the predicted max temp evolved over past days.
- * Uses the regular forecast API with past_days to get prior model run forecasts in one call.
+ * Get forecast trajectory — how the predicted max temp evolved over past model runs.
+ * Queries the Historical Forecast API with separate start_date values for each past
+ * model initialization date, extracting the predicted max temp for the specific
+ * targetDate from each run. Returns array of { modelRunDate, forecastedMaxTemp }.
+ *
+ * This properly tracks forecast convergence, unlike reading date-offset indices
+ * from a single API call which confuses spatial with temporal variation.
  */
 export async function getForecastTrajectory(lat, lon, targetDate, daysBack = 5) {
   const cacheFile = diskCacheKey('trajectory', lat, lon, targetDate, daysBack);
@@ -330,50 +342,54 @@ export async function getForecastTrajectory(lat, lon, targetDate, daysBack = 5) 
   if (cached && cached.length > 0) return cached;
 
   try {
-    // Calculate forecast_days needed to reach the target date from today
-    const today = new Date();
-    const target = new Date(targetDate);
-    const daysAhead = Math.max(1, Math.ceil((target - today) / (1000 * 60 * 60 * 24)) + 1);
-
-    const params = new URLSearchParams({
-      latitude: lat,
-      longitude: lon,
-      daily: 'temperature_2m_max',
-      temperature_unit: 'celsius',
-      past_days: daysBack,
-      forecast_days: Math.max(daysAhead, 2),
-      models: 'ecmwf_ifs025',
-    });
-
-    const res = await throttledFetch(`${BASE_PREV_RUNS}?${params}`);
-    if (!res.ok) return [];
-    const data = await res.json();
-
-    const dates = data.daily?.time || [];
-    const maxTemps = data.daily?.temperature_2m_max || [];
-
-    // Find the target date in the response and extract the forecast values
-    // The Previous Runs API returns overlapping forecasts — each day's model run
-    // produces its own forecast. We look at how the max temp for targetDate changed.
-    const targetIdx = dates.indexOf(targetDate);
-    if (targetIdx === -1) return [];
-
-    // With past_days, data at different positions represents different model runs
-    // For now, extract the single value at the target date index
     const results = [];
-    const maxTemp = maxTemps[targetIdx];
-    if (maxTemp != null) {
-      results.push({ daysAgo: 0, maxTemp });
-    }
+    const target = new Date(targetDate);
 
-    // Also check surrounding days to build trajectory from available data
-    for (let offset = 1; offset <= daysBack; offset++) {
-      const pastIdx = targetIdx - offset;
-      if (pastIdx >= 0 && maxTemps[pastIdx] != null) {
-        // This gives us the forecast initialized offset days earlier
-        results.push({ daysAgo: offset, maxTemp: maxTemps[pastIdx] });
+    // Query separate historical model runs, each initialized on a different past date
+    for (let offset = 0; offset <= daysBack; offset++) {
+      const runDate = new Date(target);
+      runDate.setDate(runDate.getDate() - offset);
+      const runDateStr = runDate.toISOString().split('T')[0];
+
+      // Skip future model runs
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (runDate > today) continue;
+
+      try {
+        const params = new URLSearchParams({
+          latitude: lat,
+          longitude: lon,
+          daily: 'temperature_2m_max',
+          temperature_unit: 'celsius',
+          start_date: runDateStr,
+          end_date: targetDate,
+          models: 'ecmwf_ifs025',
+        });
+
+        const res = await throttledFetch(`${BASE_HIST_FORECAST}?${params}`);
+        if (!res.ok) continue;
+        const data = await res.json();
+
+        const dates = data.daily?.time || [];
+        const maxTemps = data.daily?.temperature_2m_max || [];
+
+        // Find the target date's predicted max temp from this model run
+        const targetIdx = dates.indexOf(targetDate);
+        if (targetIdx !== -1 && maxTemps[targetIdx] != null) {
+          results.push({
+            daysAgo: offset,
+            modelRunDate: runDateStr,
+            forecastedMaxTemp: maxTemps[targetIdx],
+          });
+        }
+      } catch {
+        // Silently skip failed individual run queries
       }
     }
+
+    // Sort by daysAgo ascending (most recent first)
+    results.sort((a, b) => a.daysAgo - b.daysAgo);
 
     if (results.length > 0) {
       writeDiskCache(cacheFile, results);
@@ -389,6 +405,13 @@ export async function getForecastTrajectory(lat, lon, targetDate, daysBack = 5) 
  * Returns the mean bias (forecast - observation) in °C over the past 90 days.
  * Positive bias = model runs warm, negative = model runs cold.
  * Cached permanently to disk.
+ *
+ * NOTE: The "observation" baseline is ERA5 reanalysis, NOT Weather Underground.
+ * Polymarket markets resolve against Wunderground station readings, so there may
+ * be residual bias from this mismatch (ERA5 grid cell vs point station measurement).
+ * A future improvement could scrape Wunderground historical data for each city's
+ * specific station (e.g., wunderground.com/history/daily/gb/london/EGLC) and use
+ * those as the observation baseline instead.
  */
 export async function getStationBias(lat, lon, days = 90) {
   const cacheFile = diskCacheKey('bias', lat, lon, days);

@@ -4,10 +4,10 @@
  */
 
 const CITY_DATABASE = {
-  // Major US cities with their primary weather station coordinates
-  'new york': { lat: 40.7789, lon: -73.9692, station: 'Central Park, NY', icao: 'KNYC', tz: 'America/New_York', region: 'us' },
-  'nyc': { lat: 40.7789, lon: -73.9692, station: 'Central Park, NY', icao: 'KNYC', tz: 'America/New_York', region: 'us' },
-  'manhattan': { lat: 40.7789, lon: -73.9692, station: 'Central Park, NY', icao: 'KNYC', tz: 'America/New_York', region: 'us' },
+  // Major US cities — coordinates match the ICAO resolution station used by Polymarket/Wunderground
+  'new york': { lat: 40.7772, lon: -73.8726, station: 'LaGuardia Airport, NY', icao: 'KLGA', tz: 'America/New_York', region: 'us' },
+  'nyc': { lat: 40.7772, lon: -73.8726, station: 'LaGuardia Airport, NY', icao: 'KLGA', tz: 'America/New_York', region: 'us' },
+  'manhattan': { lat: 40.7772, lon: -73.8726, station: 'LaGuardia Airport, NY', icao: 'KLGA', tz: 'America/New_York', region: 'us' },
   'jfk': { lat: 40.6413, lon: -73.7781, station: 'JFK Airport, NY', icao: 'KJFK', tz: 'America/New_York', region: 'us' },
   'laguardia': { lat: 40.7772, lon: -73.8726, station: 'LaGuardia Airport, NY', icao: 'KLGA', tz: 'America/New_York', region: 'us' },
 
@@ -53,22 +53,22 @@ const CITY_DATABASE = {
   'new orleans': { lat: 29.9934, lon: -90.2580, station: 'MSY Airport, LA', icao: 'KMSY', tz: 'America/Chicago', region: 'us' },
   'salt lake city': { lat: 40.7884, lon: -111.9778, station: 'SLC Airport, UT', icao: 'KSLC', tz: 'America/Denver', region: 'us' },
 
-  // International cities — HondaCivic's trading markets
-  'london': { lat: 51.5074, lon: -0.1278, station: 'London City Airport, UK', icao: 'EGLC', tz: 'Europe/London', region: 'uk' },
-  'paris': { lat: 48.8566, lon: 2.3522, station: 'Paris CDG, France', icao: 'LFPG', tz: 'Europe/Paris', region: 'france' },
-  'tokyo': { lat: 35.6762, lon: 139.6503, station: 'Tokyo, Japan', icao: 'RJTT', tz: 'Asia/Tokyo', region: 'east_asia' },
-  'sydney': { lat: -33.8688, lon: 151.2093, station: 'Sydney, Australia', icao: 'YSSY', tz: 'Australia/Sydney', region: 'southern_hemisphere' },
+  // International cities — coordinates match Wunderground resolution station (see strategy.md Station Links)
+  'london': { lat: 51.5048, lon: 0.0553, station: 'London City Airport, UK', icao: 'EGLC', tz: 'Europe/London', region: 'uk' },
+  'paris': { lat: 49.0097, lon: 2.5479, station: 'Paris CDG, France', icao: 'LFPG', tz: 'Europe/Paris', region: 'france' },
+  'tokyo': { lat: 35.5533, lon: 139.7811, station: 'Haneda Airport, Japan', icao: 'RJTT', tz: 'Asia/Tokyo', region: 'east_asia' },
+  'sydney': { lat: -33.9461, lon: 151.1772, station: 'Sydney Airport, Australia', icao: 'YSSY', tz: 'Australia/Sydney', region: 'southern_hemisphere' },
 
-  // HondaCivic cities — additional
-  'new york city': { lat: 40.7789, lon: -73.9692, station: 'Central Park, NY', icao: 'KNYC', tz: 'America/New_York', region: 'us' },
-  'ankara': { lat: 39.9334, lon: 32.8597, station: 'Esenboga Airport, Turkey', icao: 'LTAC', tz: 'Europe/Istanbul', region: 'europe_other' },
+  // HondaCivic cities — additional (coordinates match ICAO station)
+  'new york city': { lat: 40.7772, lon: -73.8726, station: 'LaGuardia Airport, NY', icao: 'KLGA', tz: 'America/New_York', region: 'us' },
+  'ankara': { lat: 40.1244, lon: 32.9992, station: 'Esenboga Airport, Turkey', icao: 'LTAC', tz: 'Europe/Istanbul', region: 'europe_other' },
   'buenos aires': { lat: -34.8222, lon: -58.5358, station: 'Ezeiza Airport, Argentina', icao: 'SAEZ', tz: 'America/Argentina/Buenos_Aires', region: 'southern_hemisphere' },
   'hong kong': { lat: 22.3080, lon: 113.9185, station: 'HKG Airport, China', icao: 'VHHH', tz: 'Asia/Hong_Kong', region: 'east_asia' },
   'milan': { lat: 45.6306, lon: 8.7231, station: 'Malpensa Airport, Italy', icao: 'LIMC', tz: 'Europe/Rome', region: 'europe_other' },
   'munich': { lat: 48.3538, lon: 11.7861, station: 'MUC Airport, Germany', icao: 'EDDM', tz: 'Europe/Berlin', region: 'central_europe' },
   'sao paulo': { lat: -23.4356, lon: -46.4731, station: 'Guarulhos Airport, Brazil', icao: 'SBGR', tz: 'America/Sao_Paulo', region: 'southern_hemisphere' },
   'toronto': { lat: 43.6777, lon: -79.6248, station: 'Pearson Airport, Canada', icao: 'CYYZ', tz: 'America/Toronto', region: 'us' },
-  'seoul': { lat: 37.4602, lon: 126.4407, station: 'Incheon Airport, South Korea', icao: 'RKSI', tz: 'Asia/Seoul', region: 'east_asia' },
+  'seoul': { lat: 37.5586, lon: 126.7947, station: 'Gimpo Airport, South Korea', icao: 'RKSS', tz: 'Asia/Seoul', region: 'east_asia' },
   'wellington': { lat: -41.3272, lon: 174.8052, station: 'Wellington Airport, NZ', icao: 'NZWN', tz: 'Pacific/Auckland', region: 'southern_hemisphere' },
 };
 
@@ -83,8 +83,20 @@ export function resolveCity(text) {
   const sortedKeys = Object.keys(CITY_DATABASE).sort((a, b) => b.length - a.length);
 
   for (const key of sortedKeys) {
-    if (lower.includes(key)) {
-      return { ...CITY_DATABASE[key], matchedKey: key };
+    // Short keys (< 4 chars like 'dc', 'la', 'nyc', 'jfk') use word-boundary
+    // matching to prevent false positives in unrelated text
+    if (key.length < 4) {
+      if (new RegExp('\\b' + key + '\\b', 'i').test(lower)) {
+        return { ...CITY_DATABASE[key], matchedKey: key };
+      }
+    } else {
+      // Use word-boundary regex for long keys too, preventing false positives
+      // from substring matches (e.g. 'miami' inside unrelated text).
+      // Multi-word keys like "new york city" work correctly since spaces
+      // are naturally handled by the regex engine as word boundaries.
+      if (new RegExp('\\b' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(lower)) {
+        return { ...CITY_DATABASE[key], matchedKey: key };
+      }
     }
   }
 

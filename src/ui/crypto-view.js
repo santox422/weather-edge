@@ -44,7 +44,7 @@ export function renderCryptoAnalysis(market, data) {
         
         <div class="flex justify-between items-end border border-[#222] bg-black p-3 mx-1">
            <div>
-             <div class="text-[9px] text-[#555] tracking-widest uppercase mb-1" title="Model Probability / Edge">FORECAST PROB</div>
+             <div class="text-[9px] text-[#555] tracking-widest uppercase mb-1" data-tip="Model Probability / Edge">FORECAST PROB</div>
              <div class="text-[20px] font-bold ${(probability/100) > market.price ? 'text-[#00ff41]' : 'text-[#ff3333]'}">${(probability).toFixed(1)}% <span class="text-[10px] text-[#555] tracking-wider ml-1 border border-[#333] px-1 py-[1px]">MKT ${(market.price * 100).toFixed(1)}¢</span></div>
            </div>
            <div class="text-right">

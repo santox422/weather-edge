@@ -60,14 +60,15 @@ export function drawModels(data) {
       : p.model.includes('gem') ? 'GEM (Canada) — Canadian Global Environmental Multiscale model'
       : p.model.includes('meteofrance') ? 'Météo-France — French national weather service model'
       : `${modelName} weather model prediction`;
-    const threshTip = p.exceedsThreshold ? 'Exceeds the market threshold — supports YES' : 'Below the market threshold — supports NO';
-    return `<div class="flex items-center gap-[6px] px-2 py-[2px]" title="${modelTip}">
+    const dev = p.deviation != null ? ` (${p.deviation > 0 ? '+' : ''}${p.deviation.toFixed(1)}°C from median)` : '';
+    const threshTip = p.exceedsThreshold ? `In consensus with other models${dev}` : `Outlier — deviates from consensus${dev}`;
+    return `<div class="flex items-center gap-[6px] px-2 py-[2px]" data-tip="${modelTip}">
       <span class="text-[8px] text-[#666] w-[60px] truncate font-semibold">${modelName}</span>
-      <div class="flex-1 h-[6px] bg-[#111] overflow-hidden"><div class="${barBg} h-full transition-all" style="width:${pctVal}%" title="${threshTip}"></div></div>
-      <span class="text-[10px] font-bold w-[45px] text-right ${textCls}" title="Max temperature prediction: ${p.maxTemp != null ? p.maxTemp.toFixed(1) + '°C' : 'N/A'}">${p.maxTemp != null ? p.maxTemp.toFixed(1) + '°C' : '--'}</span>
+      <div class="flex-1 h-[6px] bg-[#111] overflow-hidden"><div class="${barBg} h-full transition-all" style="width:${pctVal}%" data-tip="${threshTip}"></div></div>
+      <span class="text-[10px] font-bold w-[45px] text-right ${textCls}" data-tip="Max temperature prediction: ${p.maxTemp != null ? p.maxTemp.toFixed(1) + '°C' : 'N/A'}">${p.maxTemp != null ? p.maxTemp.toFixed(1) + '°C' : '--'}</span>
     </div>`;
-  }).join('') + `<div class="text-[8px] text-[#444] text-center py-[3px] border-t border-[#111]" title="Percentage of models that agree on whether the temperature exceeds the primary threshold">
-    ${(mm.consensus.agreementRatio * 100).toFixed(0)}% agreement ${mm.consensus.allAgree ? '│ UNANIMOUS' : '│ DIVERGENT'}
+  }).join('') + `<div class="text-[8px] text-[#444] text-center py-[3px] border-t border-[#111]" data-tip="Model consensus: percentage of models within ±1.5°C of the weighted median prediction">
+    ${(mm.consensus.agreementRatio * 100).toFixed(0)}% consensus ${mm.consensus.allAgree ? '│ UNANIMOUS' : '│ DIVERGENT'}${mm.consensus.medianTemp != null ? ` │ MED ${mm.consensus.medianTemp.toFixed(1)}°C` : ''}
   </div>`;
 }
 

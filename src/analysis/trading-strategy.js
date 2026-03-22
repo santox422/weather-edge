@@ -28,6 +28,24 @@ export function computeTradingStrategy(analysis) {
 
   const confidence = parseFloat(analysis.edge?.confidence) / 100 || 0.5;
   const daysOut = analysis.daysUntilResolution || 1;
+  const skillFactor = analysis.forecastSkill?.skillFactor ?? 1.0;
+
+  // ── Entry Timing Logic ──
+  // Reference strategy shows 10-12h before resolution is critical to edge.
+  let hoursToResolution = null;
+  let entryWindow = 'UNKNOWN';
+  if (analysis.market?.endDate) {
+    const endDate = new Date(analysis.market.endDate);
+    hoursToResolution = Math.max(0, (endDate - new Date()) / (1000 * 60 * 60));
+    if (hoursToResolution < 2) entryWindow = 'WAIT';       // Too late, spreads likely wide
+    else if (hoursToResolution <= 12) entryWindow = 'OPTIMAL';   // Sweet spot: 6-12h
+    else if (hoursToResolution <= 24) entryWindow = 'ACCEPTABLE';
+    else entryWindow = 'TOO_EARLY';                           // >24h — forecast still uncertain
+  }
+
+  // Timing-based Kelly scaling: when resolution is >24h out, scale down
+  // allocations by the forecast skill factor (which decays with lead time).
+  const timingScale = daysOut > 1 ? skillFactor : 1.0;
 
   // ── Sort brackets by temperature value for adjacency analysis ──
   const brackets = bracketProbs
@@ -58,7 +76,7 @@ export function computeTradingStrategy(analysis) {
     // NO Kelly: betting NO at price (1 - marketPrice)
     // Probability of winning NO = 1 - forecastProb
     // Odds for NO bet = marketPrice / (1 - marketPrice)
-    if (b.marketPrice > 0.05) {
+    if (b.marketPrice > 0.001) {
       const noPrice = 1 - b.marketPrice;
       const pNo = 1 - b.forecastProb;
       const qNo = b.forecastProb;
@@ -84,12 +102,33 @@ export function computeTradingStrategy(analysis) {
   // ── Tier 1: YES Conviction Bets ──
   // Brackets where forecast significantly exceeds market AND Kelly is positive
   // Also recommend adjacent brackets for temperature hedging
+  const yesBets = [];
+  const usedNames = new Set();
+
+  // HondaCivic Rule: Buy YES on the bracket the model says is most likely (anchor bet).
+  // Only place the anchor bet when the forecast probability EXCEEDS the market price,
+  // otherwise we're buying at negative expected value.
+  const mostLikelyBracket = [...brackets].sort((a, b) => b.forecastProb - a.forecastProb)[0];
+  if (mostLikelyBracket && mostLikelyBracket.forecastProb > 0.10 && mostLikelyBracket.edge > 0) {
+    // Scale allocation by edge magnitude instead of a flat 5% — larger edge = larger anchor
+    const edgeScaled = Math.max(0, mostLikelyBracket.edge) * 0.15 * confidence;
+    const fixedAllocation = Math.max(0.01, Math.min(edgeScaled, 0.08)) * timingScale; // clamp to 1-8%, scaled by timing
+    yesBets.push({
+      bracket: mostLikelyBracket.name,
+      side: 'YES',
+      pctOfPortfolio: +(fixedAllocation * 100).toFixed(1),
+      entryPrice: +(mostLikelyBracket.marketPrice * 100).toFixed(1),
+      forecastProb: +(mostLikelyBracket.forecastProb * 100).toFixed(1),
+      edge: +(mostLikelyBracket.edge * 100).toFixed(1),
+      expectedReturn: mostLikelyBracket.marketPrice > 0 ? +((mostLikelyBracket.forecastProb / mostLikelyBracket.marketPrice - 1) * 100).toFixed(0) : 0,
+      kellyRaw: +((mostLikelyBracket.kellyYes || 0) * 100).toFixed(1),
+    });
+    usedNames.add(mostLikelyBracket.name);
+  }
+
   const yesCandidates = brackets
     .filter(b => b.kellyYes > 0 && b.edge > 0.04 && b.marketPrice >= 0.05 && b.marketPrice <= 0.75)
     .sort((a, b) => b.kellyYes - a.kellyYes);
-
-  const yesBets = [];
-  const usedNames = new Set();
 
   for (const b of yesCandidates) {
     if (usedNames.has(b.name)) continue;
@@ -104,7 +143,7 @@ export function computeTradingStrategy(analysis) {
     const probCap = b.forecastProb * 0.15;
 
     const kelly = Math.min(
-      b.kellyYes * HALF_KELLY * confidence * tailDiscount,
+      b.kellyYes * HALF_KELLY * confidence * tailDiscount * timingScale,
       MAX_PER_POSITION,
       probCap
     );
@@ -125,16 +164,17 @@ export function computeTradingStrategy(analysis) {
 
   // ── Ensure adjacent bracket coverage ──
   // If we have a primary YES bet, also recommend neighbors for hedging
+  // Only add neighbors with POSITIVE edge — never hedge into overpriced brackets
   if (yesBets.length > 0 && yesBets.length < 3) {
     const primaryIdx = brackets.findIndex(b => b.name === yesBets[0].bracket);
     const neighbors = [primaryIdx - 1, primaryIdx + 1]
       .filter(i => i >= 0 && i < brackets.length)
       .map(i => brackets[i])
-      .filter(b => !usedNames.has(b.name) && b.forecastProb > 0.05 && b.marketPrice < 0.80);
+      .filter(b => !usedNames.has(b.name) && b.forecastProb > 0.05 && b.marketPrice < 0.80 && b.edge > 0);
 
     for (const nb of neighbors) {
       const kelly = Math.min(
-        Math.max(nb.kellyYes || 0, 0.02) * HALF_KELLY * confidence,
+        Math.max(nb.kellyYes || 0, 0.02) * HALF_KELLY * confidence * timingScale,
         MAX_PER_POSITION * 0.8 // Neighbors get 80% allocation (matching HondaCivic spreading weights)
       );
       if (kelly < 0.003) continue;
@@ -163,7 +203,7 @@ export function computeTradingStrategy(analysis) {
     .slice(0, 3) // Max 3 overpriced NO positions
     .map(b => {
       const noPrice = 1 - b.marketPrice;
-      const kelly = Math.min(b.kellyNo * HALF_KELLY * confidence, MAX_PER_POSITION);
+      const kelly = Math.min(b.kellyNo * HALF_KELLY * confidence * timingScale, MAX_PER_POSITION);
       return {
         bracket: b.name,
         side: 'FADE',
@@ -186,12 +226,12 @@ export function computeTradingStrategy(analysis) {
   // Brackets with near-zero forecast probability — HondaCivic's "$4,103 block" approach.
   // Buying NO at 99¢+ on brackets so far from the expected temp that losing is near-impossible.
   const noBets = brackets
-    .filter(b => b.kellyNo > 0 && b.forecastProb < 0.06 && b.marketPrice >= 0.02 && b.marketPrice <= 0.12 && !usedNames.has(b.name))
+    .filter(b => b.kellyNo > 0 && b.forecastProb < 0.06 && b.marketPrice >= 0.001 && b.marketPrice <= 0.12 && !usedNames.has(b.name))
     .sort((a, b) => b.kellyNo - a.kellyNo)
     .slice(0, 6) // Max 6 NO positions
     .map(b => {
       const noPrice = 1 - b.marketPrice;
-      const kelly = Math.min(b.kellyNo * HALF_KELLY * confidence, MAX_PER_POSITION);
+      const kelly = Math.min(b.kellyNo * HALF_KELLY * confidence * timingScale, MAX_PER_POSITION);
       return {
         bracket: b.name,
         side: 'NO',
@@ -215,7 +255,7 @@ export function computeTradingStrategy(analysis) {
     .map(b => ({
       bracket: b.name,
       side: 'LONGSHOT',
-      pctOfPortfolio: Math.min(+(0.5 * confidence).toFixed(1), 1.0), // Fixed small allocation
+      pctOfPortfolio: Math.min(+(0.5 * confidence * timingScale).toFixed(1), 1.0), // Fixed small allocation
       entryPrice: +(b.marketPrice * 100).toFixed(1),
       forecastProb: +(b.forecastProb * 100).toFixed(1),
       edge: +(b.edge * 100).toFixed(1),
@@ -230,6 +270,9 @@ export function computeTradingStrategy(analysis) {
   const totalDeployed = totalYesPct + totalFadePct + totalNoPct + totalLongshotPct;
 
   // ── True Outcome Simulation (Expected Return & Max Drawdown) ──
+  // Uses BLENDED probability to avoid self-referential edge calculation:
+  // blendedProb = confidence * forecastProb + (1 - confidence) * marketPrice
+  // This reflects genuine edge only to the degree the system is confident.
   const allBets = [
     ...yesBets.map(b => ({ ...b, type: 'YES' })),
     ...overpricedNoBets.map(b => ({ ...b, type: 'NO' })),
@@ -240,7 +283,24 @@ export function computeTradingStrategy(analysis) {
   let expectedReturn = 0;
   let minPortfolioReturn = 0; // Worst-case scenario
 
-  for (const outcome of brackets) {
+  // Track per-outcome portfolio returns for win probability calculation
+  const outcomeReturns = [];
+
+  // ── Normalize blended probabilities before simulation ──
+  // When market prices don't sum to 1, raw blended probabilities are biased.
+  // Pre-compute all blended weights and normalize them to a proper distribution.
+  const rawBlendedWeights = brackets.map(outcome =>
+    confidence * outcome.forecastProb + (1 - confidence) * outcome.marketPrice
+  );
+  const blendedSum = rawBlendedWeights.reduce((a, b) => a + b, 0);
+  const normalizedBlended = blendedSum > 0
+    ? rawBlendedWeights.map(w => w / blendedSum)
+    : rawBlendedWeights; // guard against zero
+
+  for (let oi = 0; oi < brackets.length; oi++) {
+    const outcome = brackets[oi];
+    const blendedProb = normalizedBlended[oi];
+
     let outcomeReturn = 0; // percentage of portfolio
     for (const bet of allBets) {
       const alloc = bet.pctOfPortfolio;
@@ -263,69 +323,33 @@ export function computeTradingStrategy(analysis) {
         }
       }
     }
-    // Multiply outcome result by its probability to get expected portfolio sum
-    const weightedReturn = outcomeReturn * outcome.forecastProb;
+    // Use normalized blended probability for expected return — reflects genuine edge
+    // only to the degree the system is confident in forecast superiority
+    const weightedReturn = outcomeReturn * blendedProb;
     if (isFinite(weightedReturn)) expectedReturn += weightedReturn;
     if (outcomeReturn < minPortfolioReturn) {
       minPortfolioReturn = outcomeReturn;
     }
+
+    // Store for portfolio-level win probability calculation
+    outcomeReturns.push({ forecastProb: outcome.forecastProb, netReturn: outcomeReturn });
   }
 
   const maxDrawdown = Math.abs(minPortfolioReturn);
-  // ── Win Probability (correct for mutually exclusive brackets) ──
-  // Temperature can only land on ONE bracket, so bets are NOT independent.
-  // For each possible outcome, check if ANY bet in the portfolio wins.
-  // P(portfolio wins) = sum of P(outcome) for all outcomes where ≥1 bet profits.
-  //
-  // YES/LONGSHOT bets win when their specific bracket hits.
-  // FADE/NO bets win when their bracket DOESN'T hit (i.e. every other outcome).
-  //
-  // We use the original bracket forecast probabilities (before bet selection).
-  const yesBracketNames = new Set([
-    ...yesBets.map(b => b.bracket),
-    ...longshots.map(b => b.bracket),
-  ]);
-  const fadeBracketNames = new Set([
-    ...overpricedNoBets.map(b => b.bracket),
-    ...noBets.map(b => b.bracket),
-  ]);
 
+  // ── Win Probability (portfolio-level profitability) ──
+  // For each possible bracket outcome, we already computed the net portfolio return
+  // above. winProbability = sum of forecastProb for outcomes where the entire
+  // portfolio is profitable (net return > 0). This is a meaningful estimate of
+  // the probability that the overall portfolio makes money, not just any single leg.
   let winProbability = 0;
-  for (const b of brackets) {
-    const outcomeProb = b.forecastProb; // probability this temperature occurs
-    // Does any bet win if this outcome occurs?
-    const yesWins = yesBracketNames.has(b.name); // YES/LONG bet on this bracket wins
-    // FADE/NO bets on OTHER brackets win (a FADE on bracket X wins when outcome ≠ X)
-    const fadeWins = [...fadeBracketNames].some(fadeName => fadeName !== b.name);
-    if (yesWins || fadeWins) {
-      winProbability += outcomeProb;
+  for (const { forecastProb, netReturn } of outcomeReturns) {
+    if (netReturn > 0) {
+      winProbability += forecastProb;
     }
   }
   // Clamp to [0, 1]
   winProbability = Math.max(0, Math.min(1, winProbability));
-
-  // ── 50% Minimum Win Rate Enforcement ──
-  // If portfolio win rate is below 50%, drop the riskiest positions.
-  const MIN_WIN_RATE = 0.50;
-  const recomputeWin = () => {
-    const yNames = new Set([...yesBets.map(b => b.bracket), ...longshots.map(b => b.bracket)]);
-    const fNames = new Set([...overpricedNoBets.map(b => b.bracket), ...noBets.map(b => b.bracket)]);
-    let wp = 0;
-    for (const b of brackets) {
-      const yWin = yNames.has(b.name);
-      const fWin = [...fNames].some(fn => fn !== b.name);
-      if (yWin || fWin) wp += b.forecastProb;
-    }
-    return Math.max(0, Math.min(1, wp));
-  };
-  while (winProbability < MIN_WIN_RATE && longshots.length > 0) {
-    longshots.pop();
-    winProbability = recomputeWin();
-  }
-  while (winProbability < MIN_WIN_RATE && yesBets.length > 1) {
-    yesBets.pop();
-    winProbability = recomputeWin();
-  }
 
 
   const sumYesPrices = brackets.reduce((s, b) => s + b.marketPrice, 0);
@@ -343,10 +367,23 @@ export function computeTradingStrategy(analysis) {
       totalLongshotPct: +longshots.reduce((s, b) => s + b.pctOfPortfolio, 0).toFixed(1),
       totalDeployed: +[...yesBets, ...overpricedNoBets, ...noBets, ...longshots].reduce((s, b) => s + b.pctOfPortfolio, 0).toFixed(1),
       expectedReturn: isFinite(expectedReturn) ? +expectedReturn.toFixed(2) : 0,
+      expectedReturnDisclaimer: 'Model-conditional expected return using blended probability (confidence-weighted mix of forecast and market). Not risk-adjusted.',
       maxDrawdown: +maxDrawdown.toFixed(1),
       winProbability: +(winProbability * 100).toFixed(0),
       confidence: +(confidence * 100).toFixed(0),
       daysOut,
+      hoursToResolution: hoursToResolution !== null ? +hoursToResolution.toFixed(1) : null,
+      entryWindow,
+    },
+    timingAdvice: {
+      hoursToResolution: hoursToResolution !== null ? +hoursToResolution.toFixed(1) : null,
+      entryWindow,
+      recommendation: entryWindow === 'OPTIMAL' ? 'Enter now — within optimal 6-12h window'
+        : entryWindow === 'ACCEPTABLE' ? 'Acceptable entry window (12-24h) — proceed with standard sizing'
+        : entryWindow === 'TOO_EARLY' ? `Consider waiting — resolution is ${hoursToResolution?.toFixed(0) || '?'}h away. Kelly allocations scaled down by ${(skillFactor * 100).toFixed(0)}%.`
+        : entryWindow === 'WAIT' ? 'Too close to resolution (<2h) — spreads may be wide, exercise caution'
+        : 'Unknown resolution timing',
+      kellyScaling: timingScale,
     },
     arbitrage: {
       sumYesPrices: +sumYesPrices.toFixed(3),

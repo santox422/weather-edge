@@ -351,7 +351,7 @@ app.get('*', (req, res) => {
 
 // Use server.listen instead of app.listen for WebSocket support
 server.listen(PORT, () => {
-  console.log(`\n[Weather Edge] Running on port ${PORT}`);
+  console.log(`\n[Weather Edge] http://localhost:${PORT}`);
   console.log(`[WebSocket] ws://0.0.0.0:${PORT}/ws`);
   console.log(`[Cities] ${HONDA_CITIES.length}: ${HONDA_CITIES.map((c) => c.name).join(', ')}\n`);
 });

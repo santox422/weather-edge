@@ -34,6 +34,7 @@ export const ENSEMBLE_CATALOG = {
 
 // ── Region definitions ─────────────────────────────────────────
 // weight 1.0 = standard, 1.5 = boosted (home model / high-res local)
+// ensembleWeights: per-model relative weights for ensemble KDE pooling
 const REGIONS = {
   us: {
     deterministic: [
@@ -46,6 +47,7 @@ const REGIONS = {
       { model: 'ukmo_seamless',        weight: 1.0 },
     ],
     ensemble: ['gfs025', 'ecmwf_ifs025', 'ecmwf_aifs025', 'icon_seamless_eps'],
+    ensembleWeights: { gfs025: 1.5, ecmwf_ifs025: 1.0, ecmwf_aifs025: 1.0, icon_seamless_eps: 0.8 },
   },
 
   uk: {
@@ -60,6 +62,7 @@ const REGIONS = {
       { model: 'jma_seamless',         weight: 0.5 },
     ],
     ensemble: ['gfs025', 'ecmwf_ifs025', 'ecmwf_aifs025', 'icon_seamless_eps'],
+    ensembleWeights: { gfs025: 0.8, ecmwf_ifs025: 1.3, ecmwf_aifs025: 1.3, icon_seamless_eps: 1.0 },
   },
 
   central_europe: {
@@ -75,6 +78,7 @@ const REGIONS = {
       { model: 'jma_seamless',         weight: 0.5 },
     ],
     ensemble: ['gfs025', 'ecmwf_ifs025', 'ecmwf_aifs025', 'icon_seamless_eps'],
+    ensembleWeights: { gfs025: 0.7, ecmwf_ifs025: 1.2, ecmwf_aifs025: 1.2, icon_seamless_eps: 1.3 },
   },
 
   france: {
@@ -90,6 +94,7 @@ const REGIONS = {
       { model: 'jma_seamless',             weight: 0.5 },
     ],
     ensemble: ['gfs025', 'ecmwf_ifs025', 'ecmwf_aifs025', 'icon_seamless_eps'],
+    ensembleWeights: { gfs025: 0.7, ecmwf_ifs025: 1.3, ecmwf_aifs025: 1.3, icon_seamless_eps: 1.0 },
   },
 
   europe_other: {
@@ -104,6 +109,7 @@ const REGIONS = {
       { model: 'jma_seamless',         weight: 0.5 },
     ],
     ensemble: ['gfs025', 'ecmwf_ifs025', 'ecmwf_aifs025', 'icon_seamless_eps'],
+    ensembleWeights: { gfs025: 0.8, ecmwf_ifs025: 1.2, ecmwf_aifs025: 1.2, icon_seamless_eps: 1.0 },
   },
 
   east_asia: {
@@ -117,6 +123,7 @@ const REGIONS = {
       { model: 'ukmo_seamless',        weight: 0.7 },
     ],
     ensemble: ['gfs025', 'ecmwf_ifs025', 'ecmwf_aifs025', 'icon_seamless_eps'],
+    ensembleWeights: { gfs025: 1.0, ecmwf_ifs025: 1.2, ecmwf_aifs025: 1.2, icon_seamless_eps: 0.7 },
   },
 
   southern_hemisphere: {
@@ -130,6 +137,7 @@ const REGIONS = {
       { model: 'ukmo_seamless',        weight: 0.8 },
     ],
     ensemble: ['gfs025', 'ecmwf_ifs025', 'ecmwf_aifs025', 'icon_seamless_eps'],
+    ensembleWeights: { gfs025: 1.0, ecmwf_ifs025: 1.5, ecmwf_aifs025: 1.5, icon_seamless_eps: 0.8 },
   },
 
   // Fallback for any city without a specific region
@@ -144,12 +152,13 @@ const REGIONS = {
       { model: 'ukmo_seamless',        weight: 1.0 },
     ],
     ensemble: ['gfs025', 'ecmwf_ifs025', 'ecmwf_aifs025', 'icon_seamless_eps'],
+    ensembleWeights: { gfs025: 1.0, ecmwf_ifs025: 1.0, ecmwf_aifs025: 1.0, icon_seamless_eps: 1.0 },
   },
 };
 
 /**
  * Get the model configuration for a city based on its region.
- * Returns { deterministic: [{model, weight}], ensemble: [string], region }
+ * Returns { deterministic: [{model, weight}], ensemble: [string], ensembleWeights: {}, region }
  */
 export function getModelsForCity(city) {
   const region = city?.region || 'global_fallback';

@@ -61,7 +61,13 @@
 .city-row.selected { background: #0a0a0a; border-left: 2px solid #ff8c00; }
 
 /* ── Custom Tooltip ──────────────────────────────────────────── */
-[title] { cursor: help; }
+[data-tip] { cursor: help; }
+/* Nuke any CSS-generated pseudo-element tooltips so only the JS tooltip shows */
+[data-tip]::before,
+[data-tip]::after {
+  display: none !important;
+  content: none !important;
+}
 .custom-tooltip {
   display: none;
   position: fixed;

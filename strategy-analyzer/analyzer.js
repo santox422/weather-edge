@@ -433,7 +433,13 @@ export async function runFullAnalysis() {
     timing: timing.timingBuckets,
     prices,
     sells,
-    topWinners: resolvedEvents.slice(0, 10).map(e => ({ city: e.city, date: e.date, pnl: e.realizedPnl })),
+    // Re-sort descending — the array was last sorted ascending for the losers display
+    topWinners: [...resolvedEvents].sort((a, b) => b.realizedPnl - a.realizedPnl).slice(0, 10)
+      .filter(e => e.realizedPnl > 0)  // Validate: topWinners must have positive PnL
+      .map(e => ({ city: e.city, date: e.date, pnl: e.realizedPnl })),
+    topLosers: [...resolvedEvents].sort((a, b) => a.realizedPnl - b.realizedPnl).slice(0, 10)
+      .filter(e => e.realizedPnl < 0)  // Validate: topLosers must have negative PnL
+      .map(e => ({ city: e.city, date: e.date, pnl: e.realizedPnl })),
   };
 
   const fs = await import('fs');

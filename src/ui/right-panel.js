@@ -21,7 +21,7 @@ export function renderAtmospheric(data) {
 
 export function renderSkillMetrics(data, edge) {
   const daysOut = data.daysUntilResolution;
-  const crps = data.crps;
+  const spreadScore = data.spreadScore;
   const sk = getSkillDecayLabel(daysOut);
   const daysColor = daysOut <= 2 ? 'c-green' : daysOut <= 5 ? 'c-amber' : 'c-red';
 
@@ -36,7 +36,7 @@ export function renderSkillMetrics(data, edge) {
     ${mTile('DAYS OUT', daysOut != null ? `${daysOut}d` : '--', daysColor)}
     ${mTile('SKILL', sk.pct, sk.cls)}
     ${mTile('GRADE', sk.grade, sk.cls)}
-    ${mTile('CRPS', crps?.score != null ? crps.score.toFixed(2) : '--', crps?.score < 2 ? 'c-green' : 'c-amber')}
+    ${mTile('ENS CAL', spreadScore?.score != null ? spreadScore.score.toFixed(2) : '--', spreadScore?.score >= 2 && spreadScore?.score <= 4 ? 'c-green' : spreadScore?.score < 2 ? 'c-amber' : 'c-red')}
     ${mTile('SPREAD', edge?.ensembleSpread != null ? `${edge.ensembleSpread.toFixed(1)}°C` : (data.ensemble?.averageSpread != null ? `${data.ensemble.averageSpread.toFixed(1)}°C` : '--'), 'c-muted')}
     ${mTile('MODELS', `${modelCount}${isWeighted ? 'w' : ''}`, 'c-cyan')}
   </div>`;
@@ -60,13 +60,15 @@ export function renderTrajectoryAndBias(data) {
   const traj = data.trajectory;
   if (traj && traj.length > 0) {
     const sorted = [...traj].sort((a, b) => b.daysAgo - a.daysAgo);
-    const trend = sorted.length >= 2 ? sorted[sorted.length - 1].maxTemp - sorted[0].maxTemp : 0;
+    // Normalize: consume forecastedMaxTemp (new name) with fallback to maxTemp (legacy)
+    const getTemp = (pt) => pt.forecastedMaxTemp ?? pt.maxTemp;
+    const trend = sorted.length >= 2 ? getTemp(sorted[sorted.length - 1]) - getTemp(sorted[0]) : 0;
     const trendLabel = Math.abs(trend) < 0.3 ? 'STABLE' : trend > 0 ? `WARMING +${trend.toFixed(1)}°C` : `COOLING ${trend.toFixed(1)}°C`;
     const trendColor = Math.abs(trend) < 0.3 ? 'c-muted' : trend > 0 ? 'c-red' : 'c-blue';
 
-    html += `<div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" title="How the GFS max temperature forecast has changed over recent model runs">FORECAST TRAJECTORY</div>`;
+    html += `<div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]" data-tip="How the GFS max temperature forecast has changed over recent model runs">FORECAST TRAJECTORY</div>`;
     html += `<div class="grid grid-cols-${Math.min(sorted.length + 1, 4)} gap-[1px] bg-[#222]">`;
-    for (const pt of sorted) html += mTile(`${pt.daysAgo}D AGO`, `${pt.maxTemp.toFixed(1)}°C`, 'c-muted');
+    for (const pt of sorted) html += mTile(`${pt.daysAgo}D AGO`, `${getTemp(pt).toFixed(1)}°C`, 'c-muted');
     html += mTile('TREND', trendLabel, trendColor);
     html += `</div>`;
   }
@@ -74,7 +76,7 @@ export function renderTrajectoryAndBias(data) {
   const bias = data.stationBias;
   if (bias && bias.sampleSize > 0) {
     const biasColor = !bias.reliable ? 'c-muted' : bias.direction === 'warm' ? 'c-red' : bias.direction === 'cold' ? 'c-blue' : 'c-green';
-    html += `<div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] mt-[1px]" title="Historical systematic error at the nearest weather station">STATION BIAS</div>`;
+    html += `<div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] mt-[1px]" data-tip="Historical systematic error at the nearest weather station">STATION BIAS</div>`;
     html += `<div class="grid grid-cols-4 gap-[1px] bg-[#222] mobile-grid-2">
       ${mTile('BIAS', `${bias.bias > 0 ? '+' : ''}${bias.bias.toFixed(2)}°C`, biasColor)}
       ${mTile('STD', bias.stdDev != null ? `±${bias.stdDev.toFixed(2)}` : '--', 'c-muted')}
@@ -87,7 +89,7 @@ export function renderTrajectoryAndBias(data) {
   if (data.ensemble?.memberCount) {
     const region = data.modelConfig?.region || '—';
     const ensembleCount = data.modelConfig?.ensemble?.length || '?';
-    html += `<div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] mt-[1px]" title="Ensemble model configuration and bracket probability method">ENSEMBLE KDE</div>`;
+    html += `<div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] mt-[1px]" data-tip="Ensemble model configuration and bracket probability method">ENSEMBLE KDE</div>`;
     html += `<div class="grid grid-cols-4 gap-[1px] bg-[#222] mobile-grid-2">
       ${mTile('MEMBERS', `${data.ensemble.memberCount}`, 'c-cyan')}
       ${mTile('SOURCES', `${ensembleCount}`, 'c-purple')}
@@ -99,7 +101,7 @@ export function renderTrajectoryAndBias(data) {
   // ── Model Weights — per-model display for current city ──
   const modelCfg = data.modelConfig;
   if (modelCfg?.deterministic?.length > 0) {
-    html += `<div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] mt-[1px]" title="Deterministic weather models used for this city with their consensus weights. ▲ = boosted (high-res local), ▽ = reduced (less relevant for this region).">MODEL WEIGHTS</div>`;
+    html += `<div class="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] mt-[1px]" data-tip="Deterministic weather models used for this city with their consensus weights. ▲ = boosted (high-res local), ▽ = reduced (less relevant for this region).">MODEL WEIGHTS</div>`;
     html += `<div class="text-[8px]">`;
     // Header
     html += `<div class="grid grid-cols-[1fr_45px_35px_30px] gap-0 px-2 py-[2px] border-b border-[#111]">
@@ -120,7 +122,7 @@ export function renderTrajectoryAndBias(data) {
       const tempStr = pred?.maxTemp != null ? `${pred.maxTemp.toFixed(0)}` : '—';
       const tempColor = pred?.maxTemp != null ? 'c-cyan' : 'c-muted';
 
-      html += `<div class="grid grid-cols-[1fr_45px_35px_30px] gap-0 px-2 py-[1px] border-b border-[#0a0a0a] hover:bg-[#0a0a0a] transition-colors" title="${info.name} (${info.family}) — ${info.res} resolution, ${info.coverage} coverage. Weight: ${wt}x">
+      html += `<div class="grid grid-cols-[1fr_45px_35px_30px] gap-0 px-2 py-[1px] border-b border-[#0a0a0a] hover:bg-[#0a0a0a] transition-colors" data-tip="${info.name} (${info.family}) — ${info.res} resolution, ${info.coverage} coverage. Weight: ${wt}x">
         <span class="text-[#ccc] truncate">${info.name}</span>
         <span class="text-right text-[#666]">${info.res}</span>
         <span class="text-right ${wtColor} font-semibold">${wtLabel}</span>

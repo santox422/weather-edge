@@ -7,7 +7,7 @@
  * Compute composite edge score
  */
 export function computeEdgeScore(analysis) {
-  const { market, ensemble, multiModel, baseRate, daysUntilResolution, modelDivergence, forecastSkill, crps, atmospheric } = analysis;
+  const { market, ensemble, multiModel, baseRate, daysUntilResolution, modelDivergence, forecastSkill, spreadScore, atmospheric } = analysis;
 
   const bracketProbs = ensemble?.bracketProbabilities;
 
@@ -33,9 +33,15 @@ export function computeEdgeScore(analysis) {
       };
     }
 
-    const best = scored.sort((a, b) => b.absEdge - a.absEdge)[0];
+    // Prefer largest positive edge (underpriced YES) — matches HondaCivic's strategy
+    // of buying YES on the bracket your model says is most likely.
+    // Fall back to largest negative edge (overpriced FADE) only if no positive edges.
+    const positiveEdge = scored.filter(b => b.forecastProb > b.marketPrice);
+    const best = positiveEdge.length > 0
+      ? positiveEdge.sort((a, b) => (b.forecastProb - b.marketPrice) - (a.forecastProb - a.marketPrice))[0]
+      : scored.sort((a, b) => b.absEdge - a.absEdge)[0];
 
-    let conf = computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, crps, atmospheric);
+    let conf = computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, spreadScore, atmospheric);
 
     const rawEdge = best.forecastProb - best.marketPrice;
     const adjEdge = rawEdge * conf;
@@ -46,7 +52,7 @@ export function computeEdgeScore(analysis) {
     else if (absAdj > 0.08) signal = rawEdge > 0 ? 'BUY_YES' : 'BUY_NO';
     else if (absAdj > 0.04) signal = rawEdge > 0 ? 'LEAN_YES' : 'LEAN_NO';
 
-    const reasoning = buildBracketReasoning(bracketProbs, best, conf, signal, modelDivergence, forecastSkill, crps, atmospheric);
+    const reasoning = buildBracketReasoning(bracketProbs, best, conf, signal, modelDivergence, forecastSkill, spreadScore, atmospheric);
 
     return {
       marketProbability: best.marketPrice,
@@ -109,7 +115,7 @@ export function computeEdgeScore(analysis) {
 
   const totalWeight = probSources.reduce((s, p) => s + p.weight, 0);
   const forecastProb = probSources.reduce((s, p) => s + (p.value * p.weight) / totalWeight, 0);
-  const conf = computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, crps, atmospheric);
+  const conf = computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, spreadScore, atmospheric);
   const rawEdge = forecastProb - marketProb;
   const adjEdge = rawEdge * conf;
 
@@ -130,14 +136,14 @@ export function computeEdgeScore(analysis) {
     bracketProbabilities: bracketProbs,
     modelDivergence,
     ensembleSpread: ensemble?.averageSpread,
-    reasoning: buildReasoning(probSources, marketProb, forecastProb, conf, signal, modelDivergence, forecastSkill, crps, atmospheric),
+    reasoning: buildReasoning(probSources, marketProb, forecastProb, conf, signal, modelDivergence, forecastSkill, spreadScore, atmospheric),
   };
 }
 
 /**
- * Compute confidence — now incorporates forecast skill decay, CRPS, and atmospheric stability
+ * Compute confidence — now incorporates forecast skill decay, spread score, and atmospheric stability
  */
-export function computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, crps, atmospheric) {
+export function computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, spreadScore, atmospheric) {
   // Time-based decay
   let timeMult = forecastSkill?.skillFactor ?? 1.0;
   if (timeMult === null) {
@@ -160,27 +166,29 @@ export function computeConfidence(daysUntilResolution, ensemble, modelDivergence
     else spreadConf = 0.45;
   }
 
-  // CRPS adjustment — penalize poorly calibrated ensembles
-  let crpsAdj = 0;
-  if (crps?.score != null) {
-    if (crps.score < 2) crpsAdj = 0.05; // bonus for good calibration
-    else if (crps.score > 4) crpsAdj = -0.1; // penalty for poor calibration
-  }
+  // Spread score multiplier — penalize poorly calibrated ensembles
+  // NOTE: Very tight spread (< 2) is penalized as potential overconfidence,
+  // not rewarded — a too-narrow ensemble may be missing real uncertainty.
+  const spreadMult = spreadScore?.score != null
+    ? (spreadScore.score < 2 ? 0.95 : spreadScore.score > 4 ? 0.90 : 1.0)
+    : 1.0;
 
-  // Divergence bonus — divergence = potential edge opportunity
-  let divBonus = modelDivergence?.isDivergent ? 0.1 : 0;
+  // Divergence multiplier — models disagreeing means MORE uncertainty, not opportunity
+  const divMult = modelDivergence?.isDivergent
+    ? Math.max(0.7, 1 - 0.05 * (modelDivergence.difference / 1.5))
+    : 1.0;
 
-  // Atmospheric stability factor — high dew point depression = more stable = more predictable
-  let atmAdj = 0;
-  if (atmospheric?.dewPointDepression != null) {
-    if (atmospheric.dewPointDepression > 11) atmAdj = 0.05; // very dry, stable
-    else if (atmospheric.dewPointDepression < 3) atmAdj = -0.05; // near saturation, thunderstorm risk
-  }
+  // Atmospheric stability multiplier — high dew point depression = more stable = more predictable
+  const atmMult = atmospheric?.dewPointDepression != null
+    ? (atmospheric.dewPointDepression > 11 ? 1.05 : atmospheric.dewPointDepression < 3 ? 0.95 : 1.0)
+    : 1.0;
 
-  return Math.max(0.1, Math.min(1.0, timeMult * spreadConf + divBonus + crpsAdj + atmAdj));
+  // All factors are multiplicative so they scale proportionally without
+  // additive terms dominating at extremes.
+  return Math.max(0.1, Math.min(1.0, timeMult * spreadConf * divMult * spreadMult * atmMult));
 }
 
-function buildBracketReasoning(brackets, best, conf, signal, divergence, forecastSkill, crps, atmospheric) {
+function buildBracketReasoning(brackets, best, conf, signal, divergence, forecastSkill, spreadScore, atmospheric) {
   const parts = [];
   parts.push(`Multi-bracket analysis across ${brackets.length} outcomes.`);
   parts.push(`Best edge: "${best.name}" -- forecast ${(best.forecastProb * 100).toFixed(0)}% vs market ${(best.marketPrice * 100).toFixed(0)}%`);
@@ -199,8 +207,8 @@ function buildBracketReasoning(brackets, best, conf, signal, divergence, forecas
     parts.push(`  ${forecastSkill.description}`);
   }
 
-  if (crps) {
-    parts.push(`CRPS: ${crps.score.toFixed(2)} -- ${crps.interpretation}`);
+  if (spreadScore) {
+    parts.push(`ENS SPREAD: ${spreadScore.score.toFixed(2)} -- ${spreadScore.interpretation}`);
   }
 
   if (divergence?.isDivergent) {
@@ -219,7 +227,7 @@ function buildBracketReasoning(brackets, best, conf, signal, divergence, forecas
   return parts.join('\n');
 }
 
-function buildReasoning(sources, marketProb, forecastProb, confidence, signal, divergence, forecastSkill, crps, atmospheric) {
+function buildReasoning(sources, marketProb, forecastProb, confidence, signal, divergence, forecastSkill, spreadScore, atmospheric) {
   const parts = [];
   parts.push(`Market implies ${(marketProb * 100).toFixed(0)}% probability.`);
   parts.push(`Forecast analysis suggests ${(forecastProb * 100).toFixed(0)}%.`);
@@ -232,8 +240,8 @@ function buildReasoning(sources, marketProb, forecastProb, confidence, signal, d
     parts.push(`\nForecast Skill: ${forecastSkill.grade} (${(forecastSkill.skillFactor * 100).toFixed(0)}% @ ${forecastSkill.daysOut}d lead)`);
   }
 
-  if (crps) {
-    parts.push(`CRPS: ${crps.score.toFixed(2)} -- ${crps.interpretation}`);
+  if (spreadScore) {
+    parts.push(`ENS SPREAD: ${spreadScore.score.toFixed(2)} -- ${spreadScore.interpretation}`);
   }
 
   if (divergence?.isDivergent) {

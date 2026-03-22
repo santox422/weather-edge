@@ -1,5 +1,5 @@
 /**
- * Forecast Metrics — skill decay curves, CRPS calibration, and model divergence.
+ * Forecast Metrics — skill decay curves, ensemble spread calibration, and model divergence.
  */
 
 /**
@@ -33,16 +33,17 @@ export function computeForecastSkillDecay(daysOut) {
 }
 
 /**
- * Compute CRPS (Continuous Ranked Probability Score)
- * Measures how well the ensemble probability distribution matches reality.
- * Lower CRPS = better calibrated ensemble.
+ * Compute ensemble spread score (dispersion proxy).
  *
- * Since we don't have observations yet (forecasting forward), we compute
- * a proxy CRPS based on ensemble spread characteristics:
+ * NOTE: This is NOT actual CRPS (Continuous Ranked Probability Score).
+ * True CRPS requires observed outcomes to score the forecast distribution against.
+ * This function computes a **spread-based proxy** from ensemble spread characteristics:
  * - How tight/dispersed is the ensemble?
  * - Is the spread consistent with expected uncertainty?
+ *
+ * Score < 2 = tight spread (may indicate overconfidence), 2-4 = moderate, > 4 = wide/uncertain.
  */
-export function computeCRPS(ensemble) {
+export function computeSpreadScore(ensemble) {
   if (!ensemble?.timeSteps?.length) return null;
 
   // Use the ensemble spread characteristics as a calibration proxy
@@ -57,7 +58,7 @@ export function computeCRPS(ensemble) {
   const spreadVariance = spreads.reduce((sum, s) => sum + Math.pow(s - avgSpread, 2), 0) / spreads.length;
   const spreadStdDev = Math.sqrt(spreadVariance);
 
-  // CRPS proxy: normalize spread to a score
+  // Spread score proxy: normalize spread to a score
   // Well-calibrated ensembles have moderate, consistent spread
   // Score < 2 = good, 2-4 = fair, > 4 = poor
   const score = avgSpread / 5;

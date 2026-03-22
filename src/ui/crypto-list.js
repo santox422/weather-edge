@@ -53,7 +53,7 @@ function renderCryptoList() {
     displayTitle = displayTitle.replace(/Bitcoin|BTC/gi, '<span class="text-[#f7931a]">$&</span>');
     
     div.innerHTML = `
-      <div class="text-[10px] text-[#ddd] font-bold leading-tight line-clamp-2 mb-1" title="${m.question}">${displayTitle}</div>
+      <div class="text-[10px] text-[#ddd] font-bold leading-tight line-clamp-2 mb-1" data-tip="${m.question}">${displayTitle}</div>
       <div class="flex justify-between items-center px-1">
         <div class="text-[9px] text-[#888]">Vol: $${Math.round(m.volume).toLocaleString()}</div>
         <div class="text-[10px] font-bold price-cell ${m.price > 0.5 ? 'text-[#00ff41]' : 'text-[#ff3333]'}">${(m.price * 100).toFixed(1)}¢</div>
