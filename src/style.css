@@ -99,7 +99,8 @@ pre.reasoning-block {
 /* Mobile sidebar: slide out from left */
 @media (max-width: 767px) {
   html, body {
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     height: auto;
     min-height: 100vh;
   }
@@ -123,23 +124,45 @@ pre.reasoning-block {
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.6);
   }
 
-  /* Make the main weather grid a flex column on mobile */
+  /* Switch from fixed-height grid to natural document flow on mobile */
   #tab-weather {
+    display: flex !important;
+    flex-direction: column;
     height: auto !important;
     min-height: calc(100vh - 52px);
     overflow: visible !important;
   }
 
   #col-center {
+    flex: none !important;
     overflow: visible !important;
+    height: auto !important;
     min-height: 0;
   }
 
   #col-right {
+    flex: none !important;
     border-left: none !important;
     border-top: 1px solid #222;
     overflow: visible !important;
+    height: auto !important;
     min-height: 0;
+  }
+
+  /* Ensure analysis content and nested grids don't clip */
+  #analysis-content,
+  #panel-row-data,
+  #panel-brackets,
+  #panel-strategy,
+  #outcomes-list {
+    overflow: visible !important;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Stack bracket and strategy panels vertically on mobile */
+  #panel-row-data {
+    grid-template-columns: 1fr !important;
   }
 
   /* Enlarge tap targets for city rows */
