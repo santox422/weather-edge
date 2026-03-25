@@ -61,9 +61,9 @@ export default function CityList({ multiDayData, selectedDate, onSelectDate, onA
 
   return (
     <aside className={`mobile-sidebar flex flex-col overflow-hidden border-r border-[#111] bg-[#050505] ${sidebarOpen ? 'open' : ''}`}>
-      <div className="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] flex items-center justify-between gap-1.5">
-        <span>MARKETS<span className="text-[#333]"> // {marketCount}</span></span>
-        <button className="md:hidden text-[#555] text-[12px] cursor-pointer hover:text-[#ff8c00]" onClick={onCloseSidebar}>✕</button>
+      <div className="section-header px-2 py-1.5 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] border-l-2 border-l-[#ff8c00] flex items-center justify-between gap-1.5">
+        <span>MARKETS<span className="text-[#444]"> // {marketCount}</span></span>
+        <button className="md:hidden flex items-center justify-center text-[#666] text-[18px] cursor-pointer hover:text-[#ff8c00] active:text-[#ff8c00] w-[36px] h-[36px] transition-colors" onClick={onCloseSidebar} aria-label="Close sidebar">✕</button>
       </div>
 
       {/* Date Strip */}

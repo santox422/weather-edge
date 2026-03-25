@@ -7,7 +7,7 @@
  * Compute composite edge score
  */
 export function computeEdgeScore(analysis) {
-  const { market, ensemble, multiModel, baseRate, daysUntilResolution, modelDivergence, forecastSkill, spreadScore, atmospheric } = analysis;
+  const { market, ensemble, multiModel, baseRate, daysUntilResolution, modelDivergence, forecastSkill, spreadScore, atmospheric, airQuality, trajectory, advancedFactors } = analysis;
 
   const bracketProbs = ensemble?.bracketProbabilities;
 
@@ -41,7 +41,7 @@ export function computeEdgeScore(analysis) {
       ? positiveEdge.sort((a, b) => (b.forecastProb - b.marketPrice) - (a.forecastProb - a.marketPrice))[0]
       : scored.sort((a, b) => b.absEdge - a.absEdge)[0];
 
-    let conf = computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, spreadScore, atmospheric);
+    let conf = computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, spreadScore, atmospheric, airQuality, trajectory, advancedFactors);
 
     const rawEdge = best.forecastProb - best.marketPrice;
     const adjEdge = rawEdge * conf;
@@ -52,7 +52,7 @@ export function computeEdgeScore(analysis) {
     else if (absAdj > 0.08) signal = rawEdge > 0 ? 'BUY_YES' : 'BUY_NO';
     else if (absAdj > 0.04) signal = rawEdge > 0 ? 'LEAN_YES' : 'LEAN_NO';
 
-    const reasoning = buildBracketReasoning(bracketProbs, best, conf, signal, modelDivergence, forecastSkill, spreadScore, atmospheric);
+    const reasoning = buildBracketReasoning(bracketProbs, best, conf, signal, modelDivergence, forecastSkill, spreadScore, atmospheric, advancedFactors);
 
     return {
       marketProbability: best.marketPrice,
@@ -115,7 +115,7 @@ export function computeEdgeScore(analysis) {
 
   const totalWeight = probSources.reduce((s, p) => s + p.weight, 0);
   const forecastProb = probSources.reduce((s, p) => s + (p.value * p.weight) / totalWeight, 0);
-  const conf = computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, spreadScore, atmospheric);
+  const conf = computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, spreadScore, atmospheric, airQuality, trajectory, advancedFactors);
   const rawEdge = forecastProb - marketProb;
   const adjEdge = rawEdge * conf;
 
@@ -141,9 +141,10 @@ export function computeEdgeScore(analysis) {
 }
 
 /**
- * Compute confidence — now incorporates forecast skill decay, spread score, and atmospheric stability
+ * Compute confidence — now incorporates forecast skill decay, spread score,
+ * atmospheric stability, air quality, and trajectory convergence.
  */
-export function computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, spreadScore, atmospheric) {
+export function computeConfidence(daysUntilResolution, ensemble, modelDivergence, forecastSkill, spreadScore, atmospheric, airQuality = null, trajectory = null, advancedFactors = null) {
   // Time-based decay
   let timeMult = forecastSkill?.skillFactor ?? 1.0;
   if (timeMult === null) {
@@ -183,12 +184,43 @@ export function computeConfidence(daysUntilResolution, ensemble, modelDivergence
     ? (atmospheric.dewPointDepression > 11 ? 1.05 : atmospheric.dewPointDepression < 3 ? 0.95 : 1.0)
     : 1.0;
 
+  // Air quality multiplier — high AQI indicates haze/smog affecting surface temps
+  // AQI > 100 (Unhealthy for Sensitive) reduces confidence as aerosol effects are hard to model
+  let aqMult = 1.0;
+  if (airQuality) {
+    const aqi = airQuality.usAqi ?? airQuality.europeanAqi;
+    if (aqi != null) {
+      if (aqi > 150) aqMult = 0.92;       // Very unhealthy — significant aerosol effect
+      else if (aqi > 100) aqMult = 0.96;   // Unhealthy for sensitive groups
+    }
+  }
+
+  // Trajectory convergence multiplier — unstable forecast trajectory = less certainty
+  let trajMult = 1.0;
+  if (trajectory?.convergence) {
+    const conv = trajectory.convergence;
+    if (!conv.isConverging) trajMult = 0.93;             // Forecast still wandering
+    if (conv.latestDivergence != null && conv.latestDivergence > 2.0) {
+      trajMult = Math.min(trajMult, 0.90);               // GFS/ECMWF disagree significantly at latest run
+    }
+  }
+
+  // Advanced factor synoptic clarity multiplier — clear synoptic pattern = more predictable
+  let synopticMult = 1.0;
+  if (advancedFactors?.factors) {
+    const synoptic = advancedFactors.factors.find(f => f.factor === 'synoptic_pattern');
+    if (synoptic?.pattern === 'HIGH_PRESSURE_CLEAR') synopticMult = 1.05;
+    else if (synoptic?.pattern === 'FRONTAL_PASSAGE') synopticMult = 0.88;
+    else if (synoptic?.pattern === 'POST_FRONT_CLEARING') synopticMult = 0.92;
+    else if (synoptic?.pattern === 'TRANSITIONAL') synopticMult = 0.90;
+  }
+
   // All factors are multiplicative so they scale proportionally without
   // additive terms dominating at extremes.
-  return Math.max(0.1, Math.min(1.0, timeMult * spreadConf * divMult * spreadMult * atmMult));
+  return Math.max(0.1, Math.min(1.0, timeMult * spreadConf * divMult * spreadMult * atmMult * aqMult * trajMult * synopticMult));
 }
 
-function buildBracketReasoning(brackets, best, conf, signal, divergence, forecastSkill, spreadScore, atmospheric) {
+function buildBracketReasoning(brackets, best, conf, signal, divergence, forecastSkill, spreadScore, atmospheric, advancedFactors = null) {
   const parts = [];
   parts.push(`Multi-bracket analysis across ${brackets.length} outcomes.`);
   parts.push(`Best edge: "${best.name}" -- forecast ${(best.forecastProb * 100).toFixed(0)}% vs market ${(best.marketPrice * 100).toFixed(0)}%`);
@@ -220,6 +252,18 @@ function buildBracketReasoning(brackets, best, conf, signal, divergence, forecas
     parts.push(`\nAtmospheric: humidity ${atmospheric.humidity?.toFixed(0) ?? '--'}%, dew pt ${atmospheric.dewPoint?.toFixed(0) ?? '--'}°C, wind ${atmospheric.windSpeed?.toFixed(0) ?? '--'} mph, pressure ${atmospheric.pressure?.toFixed(0) ?? '--'} hPa`);
     if (atmospheric.precipProbability > 50) {
       parts.push(`  [!] High precip probability (${atmospheric.precipProbability.toFixed(0)}%) may cap temperatures`);
+    }
+  }
+
+  if (advancedFactors?.factors) {
+    parts.push(`\n--- Advanced Factors (PhD-Level) ---`);
+    for (const f of advancedFactors.factors) {
+      if (Math.abs(f.adjustment) > 0.01 || f.confidence > 0.2) {
+        parts.push(f.reasoning);
+      }
+    }
+    if (advancedFactors.netAdjustment !== 0) {
+      parts.push(`\nNet factor adjustment: ${advancedFactors.netAdjustment > 0 ? '+' : ''}${advancedFactors.netAdjustment.toFixed(2)}°C (confidence: ${(advancedFactors.netConfidence * 100).toFixed(0)}%, dominant: ${advancedFactors.dominantFactor || 'none'})`);
     }
   }
 

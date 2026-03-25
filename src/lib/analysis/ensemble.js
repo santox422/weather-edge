@@ -24,19 +24,11 @@ export function processEnsembleData(ensembleData, market, ensembleWeights = null
     return { probability: null, spread: null, members: [] };
   }
 
-  // Identify which ensemble model each member key belongs to
-  // Open-Meteo prefixes member keys like: temperature_2m_member00, etc.
-  // When multiple models are requested, keys may have model prefixes.
-  // We approximate by grouping based on member index ranges:
-  // GFS has 31 members, ECMWF IFS has 51, ECMWF AIFS has 51, ICON-EPS has 40
-  function getMemberWeight(key) {
-    if (!ensembleWeights) return 1.0;
-    // Try to identify model from key pattern — Open-Meteo uses flat member indices
-    // We can't perfectly disambiguate, so we use a uniform weight approach:
-    // Apply the average ensemble weight across all models
-    const weights = Object.values(ensembleWeights);
-    return weights.length > 0 ? weights.reduce((a, b) => a + b, 0) / weights.length : 1.0;
-  }
+  // Per-model ensemble weights are applied via the segment-based reweighting
+  // block below (lines ~97-128, conditioned on ensembleWeights). Open-Meteo
+  // uses flat member indices so individual member identification is not possible.
+  // The segment approach assigns known member counts per model (GFS=31, ECMWF=51,
+  // AIFS=51, ICON=40) and scales each segment proportionally by its weight.
 
   const memberData = times.map((time, i) => {
     const values = memberKeys.map((k) => hourly[k][i]).filter((v) => v != null);
@@ -403,4 +395,131 @@ export function percentile(arr, p) {
   const upper = Math.ceil(idx);
   if (lower === upper) return sorted[lower];
   return sorted[lower] + (sorted[upper] - sorted[lower]) * (idx - lower);
+}
+
+/**
+ * Apply METAR live observation as a hard constraint on bracket probabilities.
+ *
+ * When the market resolves TODAY and the station's observed max temp has already
+ * been recorded, brackets below the observed max become impossible (the day's
+ * high can only rise from here). Probabilities for those brackets → 0 and the
+ * remaining brackets are renormalized.
+ *
+ * @param {Object[]} bracketProbs — current bracket probability objects
+ * @param {number} observedMaxC — METAR station max temp so far today (°C)
+ * @param {string} marketUnit — 'C' or 'F' (bracket thresholds may be in °F)
+ * @param {boolean} isToday — whether the market resolves today
+ * @returns {{ adjusted: Object[], applied: boolean, observedMaxC: number }}
+ */
+export function applyMETARConstraint(bracketProbs, observedMaxC, marketUnit = 'C', isToday = true) {
+  if (!bracketProbs || bracketProbs.length === 0 || observedMaxC == null || !isToday) {
+    return { adjusted: bracketProbs, applied: false, observedMaxC };
+  }
+
+  const toC = (f) => (f - 32) * 5 / 9;
+  const isFahrenheit = marketUnit === 'F';
+
+  let changed = false;
+  const adjusted = bracketProbs.map(b => {
+    if (b.forecastProb == null || !b.threshold) return b;
+
+    const threshold = b.threshold;
+    // Determine the bracket's upper bound in °C
+    let upperBoundC;
+    if (threshold.type === 'range') {
+      upperBoundC = isFahrenheit ? toC(threshold.high) : threshold.high;
+    } else if (threshold.type === 'below') {
+      upperBoundC = isFahrenheit ? toC(threshold.value) : threshold.value;
+    } else if (threshold.type === 'exact') {
+      upperBoundC = isFahrenheit ? toC(threshold.value) + 0.28 : threshold.value + 0.5;
+    } else {
+      // 'above' brackets have no upper bound — they can always still be reached
+      return b;
+    }
+
+    // If observed max already exceeds this bracket's upper bound,
+    // the outcome is impossible — the day's high is already past this bracket
+    if (observedMaxC > upperBoundC + 0.5) {
+      changed = true;
+      return { ...b, forecastProb: 0, edge: -b.marketPrice, metarEliminated: true };
+    }
+    return b;
+  });
+
+  // Renormalize if we zeroed any brackets
+  if (changed) {
+    const totalProb = adjusted.reduce((s, b) => s + (b.forecastProb || 0), 0);
+    if (totalProb > 0 && totalProb < 0.99) {
+      for (const b of adjusted) {
+        if (b.forecastProb > 0) {
+          b.forecastProb = b.forecastProb / totalProb;
+          b.edge = b.forecastProb - b.marketPrice;
+        }
+      }
+    }
+  }
+
+  return { adjusted, applied: changed, observedMaxC };
+}
+
+/**
+ * Apply historical base rate as a Bayesian prior to bracket probabilities.
+ * Blends forecast with climatological distribution: 90% forecast + 10% base rate.
+ * Only applied when lead time > 3 days and base rate has sufficient samples.
+ *
+ * @param {Object[]} bracketProbs — current bracket probability objects
+ * @param {Object} baseRate — { rate, sampleSize, values }
+ * @param {Object[]} outcomes — market outcomes with threshold info
+ * @param {number} daysOut — forecast lead time
+ * @param {string} marketUnit — 'C' or 'F'
+ * @returns {{ adjusted: Object[], applied: boolean }}
+ */
+export function applyBaseRatePrior(bracketProbs, baseRate, outcomes, daysOut, marketUnit = 'C') {
+  if (!bracketProbs || !baseRate?.values || baseRate.values.length < 50 || daysOut <= 3) {
+    return { adjusted: bracketProbs, applied: false };
+  }
+
+  const toC = (f) => (f - 32) * 5 / 9;
+  const isFahrenheit = marketUnit === 'F';
+  const historicalMaxes = baseRate.values.filter(v => v != null);
+  if (historicalMaxes.length < 50) return { adjusted: bracketProbs, applied: false };
+
+  // Build climatological KDE from historical max temps
+  const climKDE = gaussianKDE(historicalMaxes);
+
+  // Blend weight: 10% climatology at 4-5d lead, up to 25% at 14d+
+  const climWeight = daysOut <= 5 ? 0.10 : daysOut <= 10 ? 0.15 : 0.25;
+  const fcstWeight = 1 - climWeight;
+
+  const adjusted = bracketProbs.map((b, i) => {
+    if (b.forecastProb == null) return b;
+
+    const threshold = outcomes?.[i]?.threshold || b.threshold;
+    if (!threshold) return b;
+
+    const val = isFahrenheit ? toC(threshold.value) : threshold.value;
+    const halfWidth = isFahrenheit ? 0.28 : 0.5;
+
+    let climProb;
+    if (threshold.type === 'range') {
+      const high = isFahrenheit ? toC(threshold.high) : threshold.high;
+      climProb = integratePDF(climKDE, val - halfWidth, high + halfWidth);
+    } else if (threshold.type === 'below') {
+      climProb = integratePDF(climKDE, val - 30, val + halfWidth);
+    } else if (threshold.type === 'above') {
+      climProb = integratePDF(climKDE, val - halfWidth, val + 30);
+    } else {
+      climProb = integratePDF(climKDE, val - halfWidth, val + halfWidth);
+    }
+
+    const blended = fcstWeight * b.forecastProb + climWeight * climProb;
+    return {
+      ...b,
+      forecastProb: blended,
+      edge: blended - b.marketPrice,
+      climProb,
+    };
+  });
+
+  return { adjusted, applied: true, climWeight };
 }

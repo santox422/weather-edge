@@ -18,7 +18,7 @@ const CITY_DATABASE = {
   'la': { lat: 33.9382, lon: -118.3886, station: 'LAX Airport, CA', icao: 'KLAX', tz: 'America/Los_Angeles', region: 'us' },
 
   'houston': { lat: 29.9844, lon: -95.3414, station: 'IAH Airport, TX', icao: 'KIAH', tz: 'America/Chicago', region: 'us' },
-  'dallas': { lat: 32.8998, lon: -97.0403, station: 'DFW Airport, TX', icao: 'KDFW', tz: 'America/Chicago', region: 'us' },
+  'dallas': { lat: 32.8459, lon: -96.8509, station: 'Love Field, TX', icao: 'KDAL', tz: 'America/Chicago', region: 'us' },
   'austin': { lat: 30.1945, lon: -97.6699, station: 'AUS Airport, TX', icao: 'KAUS', tz: 'America/Chicago', region: 'us' },
   'san antonio': { lat: 29.5337, lon: -98.4698, station: 'SAT Airport, TX', icao: 'KSAT', tz: 'America/Chicago', region: 'us' },
 
@@ -67,8 +67,8 @@ const CITY_DATABASE = {
   'milan': { lat: 45.6306, lon: 8.7231, station: 'Malpensa Airport, Italy', icao: 'LIMC', tz: 'Europe/Rome', region: 'europe_other' },
   'munich': { lat: 48.3538, lon: 11.7861, station: 'MUC Airport, Germany', icao: 'EDDM', tz: 'Europe/Berlin', region: 'central_europe' },
   'sao paulo': { lat: -23.4356, lon: -46.4731, station: 'Guarulhos Airport, Brazil', icao: 'SBGR', tz: 'America/Sao_Paulo', region: 'southern_hemisphere' },
-  'toronto': { lat: 43.6777, lon: -79.6248, station: 'Pearson Airport, Canada', icao: 'CYYZ', tz: 'America/Toronto', region: 'us' },
-  'seoul': { lat: 37.5586, lon: 126.7947, station: 'Gimpo Airport, South Korea', icao: 'RKSS', tz: 'Asia/Seoul', region: 'east_asia' },
+  'toronto': { lat: 43.6777, lon: -79.6248, station: 'Pearson Airport, Canada', icao: 'CYYZ', tz: 'America/Toronto', region: 'canada' },
+  'seoul': { lat: 37.4691, lon: 126.4510, station: 'Incheon Intl Airport, South Korea', icao: 'RKSI', tz: 'Asia/Seoul', region: 'east_asia' },
   'wellington': { lat: -41.3272, lon: 174.8052, station: 'Wellington Airport, NZ', icao: 'NZWN', tz: 'Pacific/Auckland', region: 'southern_hemisphere' },
 };
 

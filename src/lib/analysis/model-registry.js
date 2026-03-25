@@ -50,6 +50,20 @@ const REGIONS = {
     ensembleWeights: { gfs025: 1.5, ecmwf_ifs025: 1.0, ecmwf_aifs025: 1.0, icon_seamless_eps: 0.8 },
   },
 
+  canada: {
+    deterministic: [
+      { model: 'gem_seamless',         weight: 1.5 },  // ECCC's home model for Canada
+      { model: 'gfs_seamless',         weight: 1.2 },  // GFS is strong for Great Lakes / border regions
+      { model: 'ecmwf_ifs025',         weight: 1.0 },
+      { model: 'icon_seamless',        weight: 1.0 },
+      { model: 'ukmo_seamless',        weight: 0.8 },
+      { model: 'meteofrance_seamless', weight: 0.7 },
+      { model: 'jma_seamless',         weight: 0.5 },
+    ],
+    ensemble: ['gfs025', 'ecmwf_ifs025', 'ecmwf_aifs025', 'icon_seamless_eps'],
+    ensembleWeights: { gfs025: 1.2, ecmwf_ifs025: 1.0, ecmwf_aifs025: 1.0, icon_seamless_eps: 0.8 },
+  },
+
   uk: {
     deterministic: [
       { model: 'ukmo_seamless',        weight: 1.5 },  // MetOffice UKV 2km for UK

@@ -1,5 +1,7 @@
 // Tooltip definitions used across the terminal UI
 export const TOOLTIPS: Record<string, string> = {
+  'OUTCOME': 'Temperature bracket name. Each bracket covers a specific temperature range for the forecast day.',
+  'RAW': 'Raw ensemble-only probability before Bayesian Model Averaging (BMA) blending with deterministic models.',
   'ADJ. EDGE': 'Edge adjusted for forecast skill decay, model uncertainty, and confidence level.',
   'CONFIDENCE': 'Overall confidence in the signal (0-100%). Factors: model agreement, ensemble spread, forecast horizon, and station bias reliability.',
   'SIGNAL': 'Trading signal: STRONG BUY = high conviction long, BUY = moderate long, STRONG BUY NO = high conviction fade, HOLD = no clear edge.',

@@ -17,6 +17,9 @@ import {
   getForecastTrajectory,
   getStationBias,
   getStationMETAR,
+  getSolarRadiation,
+  getSoilConditions,
+  getHourlyTemperatureCurve,
 } from "../services/weather-service.js";
 import { resolveCity } from "./city-resolver.js";
 
@@ -27,6 +30,8 @@ import {
   computeDeterministicBracketProbs,
   blendBracketProbabilities,
   calculateEnsembleProbability,
+  applyMETARConstraint,
+  applyBaseRatePrior,
 } from "./ensemble.js";
 import {
   processAtmosphericData,
@@ -43,6 +48,8 @@ import { computeEdgeScore } from "./edge-scoring.js";
 import { computeTradingStrategy } from "./trading-strategy.js";
 import { logSignal, getSignalLogs } from "./signal-logger.js";
 import { getModelsForCity } from "./model-registry.js";
+import { runAllAdvancedFactors } from "./advanced-factors.js";
+import { applyFactorAdjustments } from "./probability-matrix.js";
 
 // ── Re-exports (public API) ──
 export { calculateEnsembleProbability } from "./ensemble.js";
@@ -94,6 +101,13 @@ export async function analyzeMarket(market) {
     stationBias: null,
     trajectory: null,
     liveWeather: null,
+    metarConstraint: null,
+    baseRateBlend: null,
+    solarRadiation: null,
+    soilConditions: null,
+    hourlyCurve: null,
+    advancedFactors: null,
+    factorAdjustment: null,
     strategy: null,
   };
 
@@ -212,6 +226,22 @@ export async function analyzeMarket(market) {
       );
     }
 
+    // 3b. Apply historical base rate as Bayesian prior (long-range forecasts only)
+    if (analysis.ensemble?.bracketProbabilities && analysis.baseRate?.values) {
+      const brResult = applyBaseRatePrior(
+        analysis.ensemble.bracketProbabilities,
+        analysis.baseRate,
+        market.outcomes,
+        daysUntilResolution || 1,
+        market.unit || 'C'
+      );
+      if (brResult.applied) {
+        analysis.ensemble.bracketProbabilities = brResult.adjusted;
+        analysis.baseRateBlend = { applied: true, climWeight: brResult.climWeight };
+        console.log(`[BASE_RATE] Blended ${(brResult.climWeight * 100).toFixed(0)}% climatological prior for ${city.matchedKey} (${daysUntilResolution}d lead)`);
+      }
+    }
+
     // 4. Get atmospheric conditions
     try {
       const atmData = await getAtmosphericData(city.lat, city.lon, 3);
@@ -238,6 +268,90 @@ export async function analyzeMarket(market) {
       console.log(
         `[WARN] METAR unavailable for ${city.matchedKey} (${city.icao}): ${err.message}`,
       );
+    }
+
+    // 5b. Apply METAR constraint — eliminate impossible brackets for same-day markets
+    if (analysis.liveWeather?.maxToday != null && analysis.ensemble?.bracketProbabilities) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const marketDateStr = market.endDate ? new Date(market.endDate).toISOString().split('T')[0] : null;
+      const isToday = marketDateStr === todayStr;
+
+      if (isToday) {
+        const metarResult = applyMETARConstraint(
+          analysis.ensemble.bracketProbabilities,
+          analysis.liveWeather.maxToday,
+          market.unit || 'C',
+          true
+        );
+        if (metarResult.applied) {
+          analysis.ensemble.bracketProbabilities = metarResult.adjusted;
+          analysis.metarConstraint = {
+            applied: true,
+            observedMaxC: metarResult.observedMaxC,
+            eliminatedBrackets: metarResult.adjusted.filter(b => b.metarEliminated).map(b => b.name),
+          };
+          console.log(`[METAR] Eliminated ${analysis.metarConstraint.eliminatedBrackets.length} brackets below observed max ${metarResult.observedMaxC}°C for ${city.matchedKey}`);
+        }
+      }
+    }
+
+    // 5c. Fetch solar radiation data
+    try {
+      analysis.solarRadiation = await getSolarRadiation(city.lat, city.lon, 3);
+    } catch (err) {
+      console.log(`[WARN] Solar radiation unavailable for ${city.matchedKey}: ${err.message}`);
+    }
+
+    // 5d. Fetch soil conditions
+    try {
+      analysis.soilConditions = await getSoilConditions(city.lat, city.lon, 3);
+    } catch (err) {
+      console.log(`[WARN] Soil conditions unavailable for ${city.matchedKey}: ${err.message}`);
+    }
+
+    // 5e. Fetch hourly temperature curves for diurnal analysis
+    try {
+      analysis.hourlyCurve = await getHourlyTemperatureCurve(
+        city.lat, city.lon, 3,
+        modelConfig.deterministicSlugs.slice(0, 3) // Top 3 models for efficiency
+      );
+    } catch (err) {
+      console.log(`[WARN] Hourly curve unavailable for ${city.matchedKey}: ${err.message}`);
+    }
+
+    // 5f. Run all 7 advanced analysis factors
+    try {
+      analysis.advancedFactors = runAllAdvancedFactors({
+        hourlyCurve: analysis.hourlyCurve,
+        soilData: analysis.soilConditions,
+        solarData: analysis.solarRadiation,
+        atmospheric: analysis.atmospheric,
+        city,
+        market: { ...market, lat: city.lat, lon: city.lon },
+      });
+    } catch (err) {
+      console.log(`[WARN] Advanced factors failed for ${city.matchedKey}: ${err.message}`);
+    }
+
+    // 5g. Apply probability matrix adjustments from advanced factors
+    if (analysis.advancedFactors && analysis.ensemble?.bracketProbabilities) {
+      try {
+        const matrixResult = applyFactorAdjustments(
+          analysis.ensemble.bracketProbabilities,
+          analysis.advancedFactors,
+          analysis.ensemble.memberMaxes,
+          market.outcomes,
+          market.unit || 'C'
+        );
+        if (matrixResult.applied) {
+          analysis.ensemble.preFactorBracketProbabilities = analysis.ensemble.bracketProbabilities;
+          analysis.ensemble.bracketProbabilities = matrixResult.adjusted;
+          analysis.factorAdjustment = matrixResult.breakdown;
+          console.log(`[FACTORS] Applied probability shift: ${matrixResult.breakdown.shiftDirection} ${matrixResult.breakdown.effectiveShift.toFixed(2)}°C for ${city.matchedKey}`);
+        }
+      } catch (err) {
+        console.log(`[WARN] Factor adjustment failed for ${city.matchedKey}: ${err.message}`);
+      }
     }
 
     // 6. Compute forecast skill decay

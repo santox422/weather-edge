@@ -73,10 +73,12 @@ export interface Atmospheric {
   dewPoint?: number;
   windSpeed?: number;
   windGusts?: number;
+  windDirection?: number;
   pressure?: number;
   cloudCover?: number;
   visibility?: number;
   precipProbability?: number;
+  dewPointDepression?: number;
 }
 
 export interface AirQuality {
@@ -128,6 +130,7 @@ export interface EnsembleData {
   averageSpread?: number;
   bracketProbabilities?: BracketProbability[];
   rawBracketProbabilities?: BracketProbability[];
+  preFactorBracketProbabilities?: BracketProbability[];
   memberMaxes?: number[];
   bmaBlend?: any;
 }
@@ -212,6 +215,41 @@ export interface CityInfo {
   lon?: number;
 }
 
+export interface AdvancedFactor {
+  factor: string;
+  adjustment: number;
+  confidence: number;
+  reasoning: string;
+  pattern?: string;
+  data?: any;
+}
+
+export interface AdvancedFactors {
+  factors: AdvancedFactor[];
+  netAdjustment: number;
+  netConfidence: number;
+  dominantFactor: string | null;
+  activeFactorCount: number;
+}
+
+export interface FactorBracketShift {
+  name: string;
+  tempC?: number;
+  originalProb: number;
+  adjustedProb: number;
+  shift: number;
+}
+
+export interface FactorBreakdown {
+  netAdjustment: number;
+  netConfidence: number;
+  effectiveShift: number;
+  shiftFraction: number;
+  shiftDirection: 'WARMING' | 'COOLING';
+  activeFactors: { factor: string; adjustment: number; confidence: number; reasoning: string }[];
+  perBracket: FactorBracketShift[];
+}
+
 export interface AnalysisData {
   market?: Market;
   city?: CityInfo;
@@ -231,6 +269,8 @@ export interface AnalysisData {
   stationBias?: StationBias;
   trajectory?: TrajectoryPoint[];
   liveWeather?: LiveWeather;
+  advancedFactors?: AdvancedFactors;
+  factorAdjustment?: FactorBreakdown;
   strategy?: Strategy;
   error?: string;
 }
@@ -308,7 +348,45 @@ export interface PaperBracket {
 
 export interface PaperAnalysis {
   cities: PaperAnalysisCity[];
+  allCityNames: string[];
   totalEnsExpectedProfit: string;
   totalFcstExpectedProfit: string;
   error?: string;
+}
+
+// ── Paper Trade Records ──────────────────────────────────────
+export interface PaperTrade {
+  id: string;
+  city: string;
+  cityName: string;
+  date: string;
+  bracket: string;
+  side: 'YES' | 'NO';
+  entryPrice: number;
+  shares: number;
+  cost: number;
+  forecastProb: number;
+  status: 'PENDING' | 'WON' | 'LOST';
+  pnl: number;
+  entryTime: string;
+  source: 'ENS' | 'FCST';
+}
+
+export interface PaperPortfolio {
+  startingBalance: number;
+  balance: number;
+  deployed: number;
+  available: number;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  pending: number;
+  winRate: number;
+  events: number;
+}
+
+export interface HondaAllData {
+  dates: Record<string, HCCityData[]>;
 }

@@ -20,29 +20,39 @@
   }
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #222; }
+  ::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
   ::-webkit-scrollbar-thumb:hover { background: #444; }
   canvas { image-rendering: pixelated; }
+
+  /* Bloomberg-style selection */
+  ::selection { background: rgba(255, 140, 0, 0.3); color: #fff; }
 }
 
 /* ── Animations ──────────────────────────────────────────────── */
 @keyframes flash-green { 0% { background: rgba(0,255,65,0.2); } 100% { background: transparent; } }
 @keyframes flash-red { 0% { background: rgba(255,51,51,0.2); } 100% { background: transparent; } }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes subtle-glow { 0%, 100% { box-shadow: 0 0 0 rgba(255,140,0,0); } 50% { box-shadow: 0 0 6px rgba(255,140,0,0.08); } }
 .price-up { animation: flash-green 0.6s ease-out; }
 .price-down { animation: flash-red 0.6s ease-out; }
 
+/* ── Section headers — Bloomberg accent bar ─────────────────── */
+.section-header {
+  position: relative;
+  text-shadow: 0 0 12px rgba(255, 140, 0, 0.1);
+}
+
 /* ── Status dots ─────────────────────────────────────────────── */
-.status-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 .status-dot.loading { background: #ff8c00; animation: blink 1.2s infinite; }
-.status-dot.live { background: #00ff41; box-shadow: 0 0 3px #00ff41; }
+.status-dot.live { background: #00ff41; box-shadow: 0 0 4px #00ff41; }
 .status-dot.error { background: #ff3333; }
-.ws-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
-.ws-dot.online { background: #00ff41; box-shadow: 0 0 3px #00ff41; }
+.ws-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.ws-dot.online { background: #00ff41; box-shadow: 0 0 4px #00ff41; }
 .ws-dot.connecting { background: #ff8c00; animation: blink 1.2s infinite; }
 .ws-dot.offline { background: #333; }
-.ws-live-dot { width: 4px; height: 4px; border-radius: 50%; display: inline-block; background: #333; margin-left: 4px; }
-.ws-live-dot.active { background: #00ff41; box-shadow: 0 0 3px #00ff41; }
+.ws-live-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; background: #333; margin-left: 4px; flex-shrink: 0; }
+.ws-live-dot.active, .ws-live-dot.online { background: #00ff41; box-shadow: 0 0 3px #00ff41; }
 
 /* ── City row selected state ─────────────────────────────────── */
 .city-row.selected { background: #0a0a0a; border-left: 2px solid #ff8c00; }
@@ -50,14 +60,16 @@
 /* ── Reasoning block ─────────────────────────────────────────── */
 pre.reasoning-block {
   background: #0a0a0a;
-  padding: 8px;
+  padding: 10px;
   font-size: 9px;
-  color: #444;
+  color: #555;
   white-space: pre-wrap;
   word-break: break-word;
   margin: 0;
   overflow-y: auto;
   max-height: 300px;
+  line-height: 1.6;
+  border-left: 1px solid #111;
 }
 
 /* ── Paper Trading Accordion ─────────────────────────────────── */
@@ -110,48 +122,156 @@ pre.reasoning-block {
 .pd-hc-row { display: flex; gap: 6px; padding: 1px 0; font-size: 8px; }
 .pd-hc-summary { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px 0 1px; margin-top: 3px; border-top: 1px solid #111; font-size: 8px; }
 
-/* ── Custom Tooltip ──────────────────────────────────────────── */
+/* ── Paper Trade Execution & Status ──────────────────────────── */
+.paper-exec-btn {
+  margin-left: auto; padding: 2px 8px; font-size: 8px; font-weight: 700;
+  font-family: 'JetBrains Mono', monospace; text-transform: uppercase;
+  letter-spacing: 0.05em; cursor: pointer; border: 1px solid #00ff41;
+  background: rgba(0, 255, 65, 0.08); color: #00ff41;
+  transition: all 0.15s; white-space: nowrap;
+}
+.paper-exec-btn:hover { background: rgba(0, 255, 65, 0.2); box-shadow: 0 0 8px rgba(0,255,65,0.15); }
+.paper-exec-btn:disabled { border-color: #ff8c00; color: #ff8c00; background: rgba(255,140,0,0.08); cursor: wait; }
+
+.paper-trades-grid { display: flex; flex-direction: column; gap: 1px; margin: 2px 0; }
+
+.paper-side-badge {
+  display: inline-block; padding: 0 4px; font-size: 7px; font-weight: 800;
+  letter-spacing: 0.05em; border-radius: 2px; min-width: 24px; text-align: center;
+}
+.paper-side-yes { background: rgba(0,255,65,0.15); color: #00ff41; border: 1px solid rgba(0,255,65,0.3); }
+.paper-side-no { background: rgba(255,80,80,0.1); color: #ff8c00; border: 1px solid rgba(255,140,0,0.3); }
+
+.paper-status-badge {
+  display: inline-block; padding: 0 4px; font-size: 7px; font-weight: 700;
+  letter-spacing: 0.05em; border-radius: 2px;
+}
+.paper-status-pending { background: rgba(255,140,0,0.15); color: #ff8c00; }
+.paper-status-won { background: rgba(0,255,65,0.15); color: #00ff41; }
+.paper-status-lost { background: rgba(255,51,51,0.15); color: #ff3333; }
+
+/* ── Actual temperature display ─────────────────────────────── */
+.pc-actual-temp {
+  color: #fff; font-weight: 800; font-size: 9px;
+  background: rgba(255,255,255,0.08); padding: 0 4px; border-radius: 2px;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.pd-actual-row { padding: 3px 0 4px; font-size: 9px; }
+.pd-actual-temp { color: #fff; font-weight: 800; font-size: 14px; }
+.pd-bracket-header {
+  display: flex; gap: 8px; padding: 2px 0; font-size: 7px;
+  font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+  border-bottom: 1px solid #222; margin-bottom: 2px;
+}
+.pd-bracket-winner {
+  background: rgba(0,255,65,0.06) !important;
+  border-left: 2px solid #00ff41;
+  padding-left: 4px;
+}
+
+/* ── Custom Tooltip — Bloomberg style ────────────────────────── */
 .custom-tooltip {
   display: none; position: fixed; z-index: 99999;
   background: #111; border: 1px solid #ff8c00; color: #ccc;
   font-family: 'JetBrains Mono', monospace; font-size: 10px;
-  line-height: 1.5; padding: 6px 10px; max-width: 300px;
-  pointer-events: none; box-shadow: 0 2px 12px rgba(0,0,0,0.6), 0 0 1px rgba(255,140,0,0.3);
+  line-height: 1.5; padding: 8px 12px; max-width: 320px;
+  pointer-events: none; box-shadow: 0 4px 20px rgba(0,0,0,0.6), 0 0 1px rgba(255,140,0,0.4), inset 0 1px 0 rgba(255,140,0,0.05);
   word-wrap: break-word; white-space: normal;
+  border-radius: 2px;
 }
 .custom-tooltip.visible { display: block; }
+
+/* ── Mobile Scroll Wrapper ───────────────────────────────────── */
+.mobile-scroll-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.strat-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* ── Mobile Responsive ───────────────────────────────────────── */
 @media (max-width: 767px) {
   html, body { overflow-y: auto; overflow-x: hidden; height: auto; min-height: 100vh; }
 
+  /* Larger scrollbar for touch */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: #333; }
+
   .mobile-sidebar {
     position: fixed; top: 0; left: 0; bottom: 0;
-    width: 85vw; max-width: 320px; z-index: 50;
-    transform: translateX(-100%); transition: transform 0.25s ease;
+    width: 90vw; max-width: 340px; z-index: 50;
+    transform: translateX(-100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: none; will-change: transform;
   }
-  .mobile-sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.6); }
+  .mobile-sidebar.open { transform: translateX(0); box-shadow: 4px 0 32px rgba(0,0,0,0.7); }
 
   #tab-weather { display: flex !important; flex-direction: column; height: auto !important; min-height: calc(100vh - 28px); overflow: visible !important; }
   #col-center { flex: none !important; overflow: visible !important; height: auto !important; min-height: 0; }
   #col-right { flex: none !important; border-left: none !important; border-top: 1px solid #222; overflow: visible !important; height: auto !important; min-height: 0; }
 
-  #analysis-content, #panel-row-data, #panel-brackets, #panel-strategy, #outcomes-list {
+  #analysis-content {
+    gap: 4px !important;
+  }
+
+  #analysis-content, #panel-brackets, #panel-strategy, #outcomes-list {
     overflow: visible !important; position: relative; z-index: 1;
   }
-  #panel-row-data, #panel-row-charts { grid-template-columns: 1fr !important; }
+  #panel-row-charts { grid-template-columns: 1fr !important; }
   .mobile-grid-2 { grid-template-columns: repeat(2, 1fr) !important; }
-  .strat-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .city-row { min-height: 38px; }
+  .city-row { min-height: 42px; padding-top: 6px !important; padding-bottom: 6px !important; }
   canvas { max-width: 100% !important; }
   #mobile-inst-bar { display: block !important; }
-  #panel-signal { padding: 8px !important; }
+  #panel-signal { padding: 10px !important; }
   .strat-summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
   .alloc-legend { flex-wrap: wrap; gap: 4px 8px; }
-  #btn-polymarket { width: 100%; justify-content: center; margin-top: 6px; }
+  #btn-polymarket { width: 100%; justify-content: center; margin-top: 8px; padding: 8px 12px !important; font-size: 10px !important; }
   .pd-grid { grid-template-columns: 1fr; }
   .paper-city-row { padding-left: 12px; }
   .paper-detail { padding-left: 16px; }
   .pc-chips { font-size: 7px; }
+
+  /* Section headers on mobile — more padding + larger for touch */
+  .section-header {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    font-size: 10px !important;
+  }
+
+  /* Bracket table — scroll hint shadow */
+  .mobile-scroll-wrapper {
+    position: relative;
+  }
+  .mobile-scroll-wrapper::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 20px;
+    background: linear-gradient(to right, transparent, rgba(0,0,0,0.6));
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.3s;
+  }
+  .mobile-scroll-wrapper::-webkit-scrollbar { height: 3px; }
+  .mobile-scroll-wrapper::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  /* Strategy tables — ensure scrollable */
+  .strat-table-wrap::-webkit-scrollbar { height: 3px; }
+  .strat-table-wrap::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  /* Factor panels — better spacing for touch */
+  #panel-factors .space-y-\[2px\] > * {
+    margin-bottom: 4px !important;
+  }
+
+  /* Atmospheric grid — 2-col on mobile */
+  #panel-atmospheric .grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Tooltip — wider on mobile */
+  .custom-tooltip { max-width: 85vw; font-size: 11px; padding: 10px 14px; }
 }
+

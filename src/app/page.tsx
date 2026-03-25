@@ -119,17 +119,30 @@ export default function HomePage() {
   // ── Price Update Handler ──
   const handlePriceUpdate = useCallback((msg: { tokenId: string; name: string; price: number; change: number }) => {
     tokenMapRef.current.set(msg.tokenId, { name: msg.name, price: msg.price });
-    // Update the matching price cell in DOM directly for performance
-    const cell = document.querySelector(`[data-token-id="${msg.tokenId}"] .price-cell`);
-    if (cell) {
-      const newMkt = (msg.price * 100).toFixed(0);
+
+    // 1. Update ALL matching price cells in DOM directly for performance
+    const cells = document.querySelectorAll(`[data-token-id="${msg.tokenId}"] .price-cell`);
+    const newMkt = (msg.price * 100).toFixed(0);
+    cells.forEach(cell => {
       if (cell.textContent !== `${newMkt}¢`) {
         cell.textContent = `${newMkt}¢`;
         cell.classList.remove('price-up', 'price-down');
         void (cell as HTMLElement).offsetWidth;
         cell.classList.add(msg.change >= 0 ? 'price-up' : 'price-down');
       }
-    }
+    });
+
+    // 2. Update React state so prices survive re-renders
+    setAnalysisData((prev: AnalysisData | null) => {
+      if (!prev?.market?.outcomes) return prev;
+      const idx = prev.market.outcomes.findIndex((o: any) => o.tokenId === msg.tokenId);
+      if (idx === -1) return prev;
+      const updated = { ...prev };
+      const outcomes = [...prev.market.outcomes];
+      outcomes[idx] = { ...outcomes[idx], price: msg.price };
+      updated.market = { ...prev.market, outcomes };
+      return updated;
+    });
   }, []);
 
   // ── Load Multi-Day Data ──
@@ -223,24 +236,32 @@ export default function HomePage() {
       {/* ── Tab Navigation + Controls ── */}
       <nav className="flex items-center border-b border-[#111] bg-[#050505] h-7 px-2 gap-1 text-[9px] font-bold tracking-widest select-none">
         <button
-          className="md:hidden bg-transparent border border-[#333] text-[#ff8c00] text-[10px] font-bold px-1.5 py-[1px] cursor-pointer mr-1"
+          className="md:hidden flex items-center justify-center bg-transparent border border-[#ff8c00]/40 text-[#ff8c00] text-[18px] font-bold w-[44px] h-[26px] cursor-pointer mr-1 hover:bg-[#ff8c00]/10 active:bg-[#ff8c00]/20 transition-colors rounded-sm"
           onClick={() => setSidebarOpen(true)}
+          aria-label="Open city list"
         >☰</button>
         <div className={tabCls('weather')} onClick={() => setActiveTab('weather')}>WEATHER</div>
         <div className={tabCls('crypto')} onClick={() => setActiveTab('crypto')}>CRYPTO</div>
         <div className={tabCls('paper')} onClick={() => setActiveTab('paper')}>PAPER</div>
         <div className="flex-1" />
-        <div className="hidden sm:flex items-center gap-1 text-[8px] text-[#888] mr-2">
-          <span>{instName}</span>
+        <div className="hidden sm:flex items-center gap-1.5 text-[8px] text-[#888] mr-2 px-2 py-[2px] bg-[#0a0a0a] border border-[#111] rounded-sm">
+          <span className="text-[#ff8c00]/60">◉</span>
+          <span className="truncate max-w-[300px]">{instName}</span>
+        </div>
+        {/* Mobile instrument label */}
+        <div className="sm:hidden flex-1 text-center text-[8px] text-[#666] truncate px-1">
+          {instName !== '—' && <span>{instName}</span>}
         </div>
         <div className="flex items-center gap-2 text-[8px]">
+          <span className="hidden sm:inline text-[#ff8c00]/40">|</span>
           <span className="hidden sm:inline text-[#555]">UTC</span>
           <span className="hidden sm:inline text-[#fff] font-bold">{utcTime}</span>
-          <span className={`ws-dot ${wsStatus}`} title={`WebSocket: ${wsStatus}`} />
-          <span className={`status-dot ${sysStatus === 'live' ? 'live' : sysStatus === 'error' ? 'error' : 'loading'}`} />
+          <span className={`ws-dot ${wsStatus}`} data-tip={`WebSocket: ${wsStatus}`} />
+          <span className={`status-dot ${sysStatus === 'live' ? 'live' : sysStatus === 'error' ? 'error' : 'loading'}`} data-tip={sysStatusText} />
           <button
-            className="bg-transparent border border-[#222] text-[#555] text-[8px] font-bold px-2 py-[2px] cursor-pointer hover:border-[#ff8c00] hover:text-[#ff8c00] transition-colors uppercase tracking-wider"
+            className="bg-transparent border border-[#222] text-[#555] text-[9px] font-bold px-2 py-[2px] cursor-pointer hover:border-[#ff8c00] hover:text-[#ff8c00] transition-colors uppercase tracking-wider"
             onClick={handleRefresh}
+            data-tip="Refresh all data (R)"
           >↻</button>
         </div>
       </nav>
@@ -274,17 +295,24 @@ export default function HomePage() {
           {/* CENTER: Analysis */}
           <section className="flex-1 overflow-y-auto bg-black min-h-0" id="col-center">
             {!analysisData && !analysisLoading ? (
-              <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+                <div className="text-[20px] text-[#ff8c00]/20">◎</div>
                 <span className="text-[14px] text-[#ff8c00] font-bold tracking-[0.2em] uppercase">SELECT INSTRUMENT</span>
-                <span className="text-[9px] text-[#333] max-w-[400px] leading-relaxed">
+                <span className="text-[9px] text-[#444] max-w-[420px] leading-relaxed">
                   Click any city with an active market to execute forecast analysis.
                   Analysis includes: ensemble spread, GFS/ECMWF divergence, 6-model consensus, forecast skill decay, CRPS calibration, atmospheric conditions, historical base rates.
                 </span>
+                <div className="flex items-center gap-3 text-[8px] text-[#333] mt-2">
+                  <span>← SELECT CITY</span>
+                  <span className="text-[#222]">│</span>
+                  <span>↻ REFRESH DATA</span>
+                </div>
               </div>
             ) : analysisLoading ? (
-              <div className="flex flex-col items-center justify-center h-full gap-2">
-                <span className="text-[#ff8c00] text-[10px] font-bold animate-pulse">[RUNNING ANALYSIS...]</span>
-                <span className="text-[#333] text-[9px]">Fetching GFS, ECMWF, ICON, JMA, GEM, ensemble data...</span>
+              <div className="flex flex-col items-center justify-center h-full gap-3">
+                <div className="w-8 h-8 border-2 border-[#ff8c00]/20 border-t-[#ff8c00] rounded-full animate-spin" />
+                <span className="text-[#ff8c00] text-[10px] font-bold tracking-wider">[RUNNING ANALYSIS...]</span>
+                <span className="text-[#444] text-[9px]">Fetching GFS, ECMWF, ICON, JMA, GEM, ensemble data...</span>
               </div>
             ) : analysisData?.error ? (
               <div className="flex items-center justify-center h-full">

@@ -47,10 +47,22 @@ Wunderground reports whole integers. If the real temperature peaks at:
 
 Each city resolves from a specific station page:
 ```
+Ankara:       https://www.wunderground.com/history/daily/tr/çubuk/LTAC
+Atlanta:      https://www.wunderground.com/history/daily/us/ga/atlanta/KATL
+Buenos Aires: https://www.wunderground.com/history/daily/ar/ezeiza/SAEZ
+Chicago:      https://www.wunderground.com/history/daily/us/il/chicago/KORD
+Dallas:       https://www.wunderground.com/history/daily/us/tx/dallas/KDAL
 London:       https://www.wunderground.com/history/daily/gb/london/EGLC
-NYC:          https://www.wunderground.com/history/daily/us/new-york-city/KLGA
-Seoul:        https://www.wunderground.com/history/daily/kr/seoul/RKSS
-Ankara:       https://www.wunderground.com/history/daily/tr/ankara/LTAC
+Miami:        https://www.wunderground.com/history/daily/us/fl/miami/KMIA
+Milan:        https://www.wunderground.com/history/daily/it/milan/LIMC
+Munich:       https://www.wunderground.com/history/daily/de/munich/EDDM
+NYC:          https://www.wunderground.com/history/daily/us/ny/new-york-city/KLGA
+Paris:        https://www.wunderground.com/history/daily/fr/paris/LFPG
+Sao Paulo:    https://www.wunderground.com/history/daily/br/guarulhos/SBGR
+Seattle:      https://www.wunderground.com/history/daily/us/wa/seatac/KSEA
+Seoul:        https://www.wunderground.com/history/daily/kr/incheon/RKSI
+Toronto:      https://www.wunderground.com/history/daily/ca/mississauga/CYYZ
+Wellington:   https://www.wunderground.com/history/daily/nz/wellington/NZWN
 ```
 
 ---

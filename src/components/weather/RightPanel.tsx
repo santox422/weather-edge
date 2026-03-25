@@ -1,7 +1,7 @@
 'use client';
 
 import type { AnalysisData } from '@/types';
-import { TOOLTIPS } from '@/lib/helpers';
+import MetricTile from './panels/MetricTile';
 
 // Model catalog — mirrors server-side model-registry.js for display purposes
 const MODEL_CATALOG: Record<string, { name: string; res: string; family: string; coverage: string }> = {
@@ -19,16 +19,6 @@ const MODEL_CATALOG: Record<string, { name: string; res: string; family: string;
 
 function getModelInfo(slug: string) {
   return MODEL_CATALOG[slug] || { name: slug, res: '?', family: '?', coverage: '?' };
-}
-
-function Tile({ label, value, colorClass = 'text-[#ccc]' }: { label: string; value: string; colorClass?: string }) {
-  const tip = TOOLTIPS[label] || '';
-  return (
-    <div className="bg-[#0a0a0a] p-[4px_6px] cursor-help" title={tip} data-tip={tip}>
-      <div className="text-[7px] text-[#444] uppercase tracking-[0.12em] font-semibold">{label}</div>
-      <div className={`text-[11px] font-bold mt-[1px] ${colorClass}`}>{value}</div>
-    </div>
-  );
 }
 
 function getSkillDecay(days: number | null | undefined) {
@@ -63,31 +53,31 @@ export default function RightPanel({ data, wsStatus = 'offline' }: { data: Analy
     <aside className="flex flex-col overflow-y-auto border-l border-[#111] md:border-t-0 border-t border-t-[#222] bg-[#050505]" id="col-right">
       {/* Forecast Metrics */}
       <div>
-        <div className="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]">FORECAST METRICS</div>
+        <div className="section-header px-2 py-1.5 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] border-l-2 border-l-[#ff8c00]">FORECAST METRICS</div>
         <div className="grid grid-cols-3 gap-[1px] bg-[#222] mobile-grid-2">
-          <Tile label="DAYS OUT" value={daysOut != null ? `${daysOut}d` : '--'} colorClass={daysColor} />
-          <Tile label="SKILL" value={sk.pct} colorClass={sk.cls} />
-          <Tile label="GRADE" value={sk.grade} colorClass={sk.cls} />
-          <Tile label="ENS CAL" value={spScore?.score != null ? spScore.score.toFixed(2) : '--'}
+          <MetricTile label="DAYS OUT" value={daysOut != null ? `${daysOut}d` : '--'} colorClass={daysColor} />
+          <MetricTile label="SKILL" value={sk.pct} colorClass={sk.cls} />
+          <MetricTile label="GRADE" value={sk.grade} colorClass={sk.cls} />
+          <MetricTile label="ENS CAL" value={spScore?.score != null ? spScore.score.toFixed(2) : '--'}
             colorClass={spScore?.score != null && spScore.score >= 2 && spScore.score <= 4 ? 'text-[#00ff41]' : spScore?.score != null && spScore.score < 2 ? 'text-[#ff8c00]' : 'text-[#ff3333]'} />
-          <Tile label="SPREAD" value={e.ensembleSpread != null ? `${e.ensembleSpread.toFixed(1)}°C` : (data.ensemble?.averageSpread != null ? `${data.ensemble.averageSpread.toFixed(1)}°C` : '--')} colorClass="text-[#555]" />
-          <Tile label="MODELS" value={`${modelCount}${isWeighted ? 'w' : ''}`} colorClass="text-[#00bcd4]" />
+          <MetricTile label="SPREAD" value={e.ensembleSpread != null ? `${e.ensembleSpread.toFixed(1)}°C` : (data.ensemble?.averageSpread != null ? `${data.ensemble.averageSpread.toFixed(1)}°C` : '--')} colorClass="text-[#555]" />
+          <MetricTile label="MODELS" value={`${modelCount}${isWeighted ? 'w' : ''}`} colorClass="text-[#00bcd4]" />
         </div>
       </div>
 
       {/* Atmospheric */}
       <div>
-        <div className="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]">ATMOSPHERIC</div>
+        <div className="section-header px-2 py-1.5 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] border-l-2 border-l-[#ff8c00]">ATMOSPHERIC</div>
         {atm ? (
           <div className="grid grid-cols-4 gap-[1px] bg-[#222] mobile-grid-2">
-            <Tile label="HUMIDITY" value={`${atm.humidity?.toFixed(0) ?? '--'}%`} colorClass="text-[#00bcd4]" />
-            <Tile label="DEW PT" value={`${atm.dewPoint?.toFixed(1) ?? '--'}°C`} colorClass="text-[#4488ff]" />
-            <Tile label="WIND" value={`${atm.windSpeed?.toFixed(0) ?? '--'} mph`} />
-            <Tile label="GUSTS" value={`${atm.windGusts?.toFixed(0) ?? '--'} mph`} colorClass="text-[#ff8c00]" />
-            <Tile label="PRESSURE" value={`${atm.pressure?.toFixed(0) ?? '--'} hPa`} colorClass="text-[#bb86fc]" />
-            <Tile label="CLOUD" value={`${atm.cloudCover?.toFixed(0) ?? '--'}%`} colorClass="text-[#555]" />
-            <Tile label="VIS" value={`${atm.visibility != null ? (atm.visibility / 1000).toFixed(1) : '--'} km`} colorClass="text-[#555]" />
-            <Tile label="PRECIP" value={`${atm.precipProbability?.toFixed(0) ?? '--'}%`} colorClass={(atm.precipProbability ?? 0) > 50 ? 'text-[#4488ff]' : 'text-[#555]'} />
+            <MetricTile label="HUMIDITY" value={`${atm.humidity?.toFixed(0) ?? '--'}%`} colorClass="text-[#00bcd4]" />
+            <MetricTile label="DEW PT" value={`${atm.dewPoint?.toFixed(1) ?? '--'}°C`} colorClass="text-[#4488ff]" />
+            <MetricTile label="WIND" value={`${atm.windSpeed?.toFixed(0) ?? '--'} mph`} />
+            <MetricTile label="GUSTS" value={`${atm.windGusts?.toFixed(0) ?? '--'} mph`} colorClass="text-[#ff8c00]" />
+            <MetricTile label="PRESSURE" value={`${atm.pressure?.toFixed(0) ?? '--'} hPa`} colorClass="text-[#bb86fc]" />
+            <MetricTile label="CLOUD" value={`${atm.cloudCover?.toFixed(0) ?? '--'}%`} colorClass="text-[#555]" />
+            <MetricTile label="VIS" value={`${atm.visibility != null ? (atm.visibility / 1000).toFixed(1) : '--'} km`} colorClass="text-[#555]" />
+            <MetricTile label="PRECIP" value={`${atm.precipProbability?.toFixed(0) ?? '--'}%`} colorClass={(atm.precipProbability ?? 0) > 50 ? 'text-[#4488ff]' : 'text-[#555]'} />
           </div>
         ) : <span className="text-[#333] text-[9px] p-2 block">No data</span>}
       </div>
@@ -95,12 +85,12 @@ export default function RightPanel({ data, wsStatus = 'offline' }: { data: Analy
       {/* Trajectory */}
       {traj && traj.length > 0 && (
         <div>
-          <div className="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]"
-            title="How the GFS max temperature forecast has changed over recent model runs">FORECAST TRAJECTORY</div>
+          <div className="section-header px-2 py-1.5 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] border-l-2 border-l-[#ff8c00]"
+            data-tip="How the GFS max temperature forecast has changed over recent model runs">FORECAST TRAJECTORY</div>
           <div className={`grid grid-cols-${Math.min(traj.length + 1, 4)} gap-[1px] bg-[#222]`}>
             {[...traj].sort((a, b) => b.daysAgo - a.daysAgo).map(pt => {
               const temp = pt.forecastedMaxTemp ?? pt.maxTemp ?? 0;
-              return <Tile key={pt.daysAgo} label={`${pt.daysAgo}D AGO`} value={`${temp.toFixed(1)}°C`} colorClass="text-[#555]" />;
+              return <MetricTile key={pt.daysAgo} label={`${pt.daysAgo}D AGO`} value={`${temp.toFixed(1)}°C`} colorClass="text-[#555]" />;
             })}
             {(() => {
               const sorted = [...traj].sort((a, b) => b.daysAgo - a.daysAgo);
@@ -108,7 +98,7 @@ export default function RightPanel({ data, wsStatus = 'offline' }: { data: Analy
               const trend = sorted.length >= 2 ? getT(sorted[sorted.length - 1]) - getT(sorted[0]) : 0;
               const label = Math.abs(trend) < 0.3 ? 'STABLE' : trend > 0 ? `WARMING +${trend.toFixed(1)}°C` : `COOLING ${trend.toFixed(1)}°C`;
               const cls = Math.abs(trend) < 0.3 ? 'text-[#555]' : trend > 0 ? 'text-[#ff3333]' : 'text-[#4488ff]';
-              return <Tile label="TREND" value={label} colorClass={cls} />;
+              return <MetricTile label="TREND" value={label} colorClass={cls} />;
             })()}
           </div>
         </div>
@@ -117,14 +107,14 @@ export default function RightPanel({ data, wsStatus = 'offline' }: { data: Analy
       {/* Station Bias */}
       {bias && bias.sampleSize > 0 && (
         <div>
-          <div className="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] mt-[1px]"
-            title="Historical systematic error at the nearest weather station">STATION BIAS</div>
+          <div className="section-header px-2 py-1.5 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] border-l-2 border-l-[#ff8c00] mt-[1px]"
+            data-tip="Historical systematic error at the nearest weather station">STATION BIAS</div>
           <div className="grid grid-cols-4 gap-[1px] bg-[#222] mobile-grid-2">
-            <Tile label="BIAS" value={`${bias.bias > 0 ? '+' : ''}${bias.bias.toFixed(2)}°C`}
+            <MetricTile label="BIAS" value={`${bias.bias > 0 ? '+' : ''}${bias.bias.toFixed(2)}°C`}
               colorClass={!bias.reliable ? 'text-[#555]' : bias.direction === 'warm' ? 'text-[#ff3333]' : bias.direction === 'cold' ? 'text-[#4488ff]' : 'text-[#00ff41]'} />
-            <Tile label="STD" value={bias.stdDev != null ? `±${bias.stdDev.toFixed(2)}` : '--'} colorClass="text-[#555]" />
-            <Tile label="N" value={`${bias.sampleSize}`} colorClass={bias.reliable ? 'text-[#00ff41]' : 'text-[#ff8c00]'} />
-            <Tile label="STATUS" value={bias.reliable ? 'ACTIVE' : 'LOW'} colorClass={bias.reliable ? 'text-[#00ff41]' : 'text-[#ff8c00]'} />
+            <MetricTile label="STD" value={bias.stdDev != null ? `±${bias.stdDev.toFixed(2)}` : '--'} colorClass="text-[#555]" />
+            <MetricTile label="N" value={`${bias.sampleSize}`} colorClass={bias.reliable ? 'text-[#00ff41]' : 'text-[#ff8c00]'} />
+            <MetricTile label="STATUS" value={bias.reliable ? 'ACTIVE' : 'LOW'} colorClass={bias.reliable ? 'text-[#00ff41]' : 'text-[#ff8c00]'} />
           </div>
         </div>
       )}
@@ -132,13 +122,13 @@ export default function RightPanel({ data, wsStatus = 'offline' }: { data: Analy
       {/* Ensemble KDE Info */}
       {data.ensemble?.memberCount && (
         <div>
-          <div className="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] mt-[1px]"
-            title="Ensemble model configuration and bracket probability method">ENSEMBLE KDE</div>
+          <div className="section-header px-2 py-1.5 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] border-l-2 border-l-[#ff8c00] mt-[1px]"
+            data-tip="Ensemble model configuration and bracket probability method">ENSEMBLE KDE</div>
           <div className="grid grid-cols-4 gap-[1px] bg-[#222] mobile-grid-2">
-            <Tile label="MEMBERS" value={`${data.ensemble.memberCount}`} colorClass="text-[#00bcd4]" />
-            <Tile label="SOURCES" value={`${modelCfg?.ensemble?.length || '?'}`} colorClass="text-[#bb86fc]" />
-            <Tile label="BW" value="0.5°C" colorClass="text-[#555]" />
-            <Tile label="REGION" value={(modelCfg?.region || '—').toUpperCase().replace(/_/g, ' ')} colorClass="text-[#ff8c00]" />
+            <MetricTile label="MEMBERS" value={`${data.ensemble.memberCount}`} colorClass="text-[#00bcd4]" />
+            <MetricTile label="SOURCES" value={`${modelCfg?.ensemble?.length || '?'}`} colorClass="text-[#bb86fc]" />
+            <MetricTile label="BW" value="0.5°C" colorClass="text-[#555]" />
+            <MetricTile label="REGION" value={(modelCfg?.region || '—').toUpperCase().replace(/_/g, ' ')} colorClass="text-[#ff8c00]" />
           </div>
         </div>
       )}
@@ -146,8 +136,8 @@ export default function RightPanel({ data, wsStatus = 'offline' }: { data: Analy
       {/* Model Weights — per-city detailed table */}
       {modelCfg?.deterministic && modelCfg.deterministic.length > 0 && (
         <div>
-          <div className="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] mt-[1px]"
-            title="Deterministic models with weighted consensus for this city">MODEL WEIGHTS</div>
+          <div className="section-header px-2 py-1.5 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] border-l-2 border-l-[#ff8c00] mt-[1px]"
+            data-tip="Deterministic models with weighted consensus for this city">MODEL WEIGHTS</div>
           <div className="text-[8px]">
             {/* Header */}
             <div className="grid grid-cols-[1fr_45px_35px_30px] gap-0 px-2 py-[2px] border-b border-[#111]">
@@ -181,22 +171,22 @@ export default function RightPanel({ data, wsStatus = 'offline' }: { data: Analy
 
       {/* Air Quality */}
       <div>
-        <div className="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a]">AIR QUALITY / UV</div>
+        <div className="section-header px-2 py-1.5 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] border-l-2 border-l-[#ff8c00]">AIR QUALITY / UV</div>
         {aq ? (
           <div className="grid grid-cols-4 gap-[1px] bg-[#222] mobile-grid-2">
-            <Tile label="AQI" value={aq.usAqi != null ? aq.usAqi.toFixed(0) : '--'}
+            <MetricTile label="AQI" value={aq.usAqi != null ? aq.usAqi.toFixed(0) : '--'}
               colorClass={aq.usAqi != null ? (aq.usAqi <= 50 ? 'text-[#00ff41]' : aq.usAqi <= 100 ? 'text-[#ff8c00]' : 'text-[#ff3333]') : 'text-[#555]'} />
-            <Tile label="UV" value={aq.uvIndex != null ? aq.uvIndex.toFixed(1) : '--'}
+            <MetricTile label="UV" value={aq.uvIndex != null ? aq.uvIndex.toFixed(1) : '--'}
               colorClass={aq.uvIndex != null ? (aq.uvIndex <= 2 ? 'text-[#00ff41]' : aq.uvIndex <= 5 ? 'text-[#ff8c00]' : 'text-[#ff3333]') : 'text-[#555]'} />
-            <Tile label="PM2.5" value={aq.pm25 != null ? aq.pm25.toFixed(1) : '--'} colorClass="text-[#555]" />
-            <Tile label="O₃" value={aq.ozone != null ? aq.ozone.toFixed(0) : '--'} colorClass="text-[#555]" />
+            <MetricTile label="PM2.5" value={aq.pm25 != null ? aq.pm25.toFixed(1) : '--'} colorClass="text-[#555]" />
+            <MetricTile label="O₃" value={aq.ozone != null ? aq.ozone.toFixed(0) : '--'} colorClass="text-[#555]" />
           </div>
         ) : <span className="text-[#333] text-[9px] p-2 block">No data</span>}
       </div>
 
       {/* Live Prices ticker */}
       <div className="flex-1 flex flex-col min-h-0">
-        <div className="px-2 py-1 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] flex items-center gap-1">
+        <div className="section-header px-2 py-1.5 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] border-l-2 border-l-[#ff8c00] flex items-center gap-1">
           LIVE PRICES
           <span className={`ws-live-dot ${wsStatus}`} />
           <span className="text-[7px] text-[#444] font-normal normal-case tracking-normal ml-auto">

@@ -12,7 +12,8 @@
  */
 
 import { analyzeMarket } from '../analysis/analysis-engine.js';
-import { getCityMarketsMultiDay } from './polymarket-service.js';
+import { getCityMarketsMultiDay, HONDA_CITIES } from './polymarket-service.js';
+import { addTrades } from './paper-trade-store.js';
 
 const PORTFOLIO_SIZE = 10000;
 
@@ -197,6 +198,7 @@ export async function runPaperAnalysis(targetDate) {
     perEventBudget: +perEventBudget.toFixed(0),
     portfolioSize: PORTFOLIO_SIZE,
     cities: paperCities,
+    allCityNames: HONDA_CITIES.map(c => c.name),
     totalEnsExpectedProfit: +totalEnsProfit.toFixed(2),
     totalFcstExpectedProfit: +totalFcstProfit.toFixed(2),
   };
@@ -303,4 +305,85 @@ export function getHondaCivicTrades(db, targetDate) {
     console.error(`[PAPER] Honda Civic DB error: ${err.message}`);
     return [];
   }
+}
+
+/**
+ * Execute paper trades for all cities in an analysis result.
+ * Follows the HondaCivic strategy: 1 YES on best bracket + 3 NO on tail brackets.
+ * Budget: 6% YES, 29%×3 NO per city event.
+ */
+export function executePaperTrades(analysis) {
+  if (!analysis || !analysis.cities || analysis.cities.length === 0) {
+    return { trades: [], added: 0 };
+  }
+
+  const now = Date.now();
+  const newTrades = [];
+
+  for (const city of analysis.cities) {
+    const perEventBudget = analysis.perEventBudget || (PORTFOLIO_SIZE / analysis.cities.length);
+    const yesAlloc = perEventBudget * 0.06;
+    const noAllocEach = perEventBudget * 0.29;
+
+    // Use FCST strategy (blended forecast — matches HondaCivic's approach)
+    const yesBracket = city.fcst?.yesBracket || city.ens?.yesBracket;
+    const noBrackets = city.fcst?.noBrackets || city.ens?.noBrackets || [];
+    if (!yesBracket) continue;
+
+    // Find YES bracket data from allBrackets
+    const yesData = city.allBrackets?.find(b => b.name === yesBracket);
+    const yesPrice = yesData ? yesData.mkt / 100 : (city.fcst?.yesPrice || 50) / 100;
+    const yesProb = yesData ? yesData.fcst : (city.fcst?.yesProb || 50);
+
+    // YES trade
+    const safeYesPrice = Math.max(yesPrice, 0.01);
+    newTrades.push({
+      id: `${city.city}-${city.date}-YES-${now}`,
+      city: city.city,
+      cityName: city.cityName || city.city,
+      date: city.date,
+      bracket: yesBracket,
+      side: 'YES',
+      entryPrice: +safeYesPrice.toFixed(4),
+      shares: +(yesAlloc / safeYesPrice).toFixed(2),
+      cost: +yesAlloc.toFixed(2),
+      forecastProb: +yesProb,
+      status: 'PENDING',
+      pnl: 0,
+      entryTime: new Date(now).toISOString(),
+      source: 'FCST',
+    });
+
+    // 3 NO trades on tail brackets
+    for (const noBracket of noBrackets.slice(0, 3)) {
+      const noData = city.allBrackets?.find(b => b.name === noBracket);
+      const noMktPrice = noData ? noData.mkt / 100 : 0.01;
+      // NO entry price = 1 - yesPrice (buy NO = sell YES)
+      const noEntryPrice = Math.max(1 - noMktPrice, 0.90);
+      const noProb = noData ? (100 - noData.fcst) : 100;
+
+      newTrades.push({
+        id: `${city.city}-${city.date}-NO-${noBracket}-${now}`,
+        city: city.city,
+        cityName: city.cityName || city.city,
+        date: city.date,
+        bracket: noBracket,
+        side: 'NO',
+        entryPrice: +noEntryPrice.toFixed(4),
+        shares: +(noAllocEach / noEntryPrice).toFixed(2),
+        cost: +noAllocEach.toFixed(2),
+        forecastProb: +noProb,
+        status: 'PENDING',
+        pnl: 0,
+        entryTime: new Date(now).toISOString(),
+        source: 'FCST',
+      });
+    }
+  }
+
+  if (newTrades.length === 0) return { trades: [], added: 0 };
+
+  const result = addTrades(newTrades);
+  console.log(`[PAPER] Executed ${result.added} new trades (${newTrades.length} generated, ${result.total} total stored)`);
+  return { trades: newTrades, added: result.added, total: result.total };
 }
