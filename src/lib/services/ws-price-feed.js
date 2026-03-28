@@ -181,10 +181,16 @@ export class PriceFeed {
     const bid = item.best_bid !== undefined ? parseFloat(item.best_bid) : NaN;
     const ask = item.best_ask !== undefined ? parseFloat(item.best_ask) : NaN;
 
-    if (item.price != null && item.price !== "") {
+    if (!isNaN(bid) || !isNaN(ask)) {
+      if (!isNaN(bid) && !isNaN(ask)) {
+        price = (bid + ask) / 2;
+      } else if (!isNaN(bid)) {
+        price = bid;
+      } else if (!isNaN(ask)) {
+        price = ask >= 0.95 ? 0 : ask / 2;
+      }
+    } else if (item.price != null && item.price !== "") {
       price = parseFloat(item.price);
-    } else if (!isNaN(bid) || !isNaN(ask)) {
-      price = !isNaN(bid) && !isNaN(ask) ? (bid + ask) / 2 : (!isNaN(bid) ? bid : ask);
     }
 
     if (isNaN(price)) return;
@@ -217,8 +223,16 @@ export class PriceFeed {
     const bestAsk = asks.length > 0 ? parseFloat(asks[0].price) : NaN;
 
     if (!isNaN(bestBid) || !isNaN(bestAsk)) {
-      const price = !isNaN(bestBid) && !isNaN(bestAsk) ? (bestBid + bestAsk) / 2 :
-                    !isNaN(bestBid) ? bestBid : bestAsk;
+      let price;
+      if (!isNaN(bestBid) && !isNaN(bestAsk)) {
+        price = (bestBid + bestAsk) / 2;
+      } else if (!isNaN(bestBid)) {
+        price = bestBid;
+      } else if (!isNaN(bestAsk)) {
+        price = bestAsk >= 0.95 ? 0 : bestAsk / 2;
+      } else {
+        price = 0;
+      }
       this.lastPrices.set(tokenId, price);
 
       const meta = this.subscribedTokens.get(tokenId);

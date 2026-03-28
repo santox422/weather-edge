@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
 /* ── Custom Theme ────────────────────────────────────────────── */
 @theme {
@@ -40,6 +41,171 @@
 .section-header {
   position: relative;
   text-shadow: 0 0 12px rgba(255, 140, 0, 0.1);
+  padding: 6px 10px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  background: #0a0a0a;
+  border-bottom: 1px solid #1a1a1a;
+  border-left: 2px solid #ff8c00;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Analysis View — Redesigned layout system ───────────────── */
+.analysis-view {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px;
+}
+
+.analysis-card {
+  background: #050505;
+  border: 1px solid #111;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.analysis-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+/* ── Signal Hero ─────────────────────────────────────────────── */
+.signal-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.station-info-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+  color: #444;
+  margin-bottom: 6px;
+}
+.station-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00ff41;
+  box-shadow: 0 0 4px rgba(0, 255, 65, 0.4);
+  flex-shrink: 0;
+}
+
+.live-temp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.live-temp-badge,
+.max-temp-badge {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.live-temp-label,
+.max-temp-label {
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+.live-temp-label {
+  color: #00ff41;
+  background: rgba(0, 255, 65, 0.08);
+  border: 1px solid rgba(0, 255, 65, 0.2);
+}
+.max-temp-label {
+  color: #ff8c00;
+  background: rgba(255, 140, 0, 0.08);
+  border: 1px solid rgba(255, 140, 0, 0.2);
+}
+.live-temp-value {
+  font-size: 12px;
+  font-weight: 800;
+  color: #00ff41;
+}
+.max-temp-value {
+  font-size: 12px;
+  font-weight: 800;
+  color: #ff8c00;
+}
+.live-temp-sub,
+.max-temp-sub {
+  font-size: 9px;
+  opacity: 0.5;
+}
+.live-temp-sub { color: #00ff41; }
+.max-temp-sub { color: #ff8c00; }
+.temp-divider {
+  color: #222;
+  font-size: 12px;
+}
+
+/* ── Analysis Buttons ────────────────────────────────────────── */
+.analysis-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #222;
+  color: #555;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 4px 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  transition: all 0.15s;
+  white-space: nowrap;
+  background: transparent;
+}
+.analysis-btn:hover,
+.analysis-btn.active {
+  border-color: #ff8c00;
+  color: #ff8c00;
+  background: rgba(255, 140, 0, 0.06);
+}
+.analysis-btn.primary {
+  border-color: #ff8c00;
+  color: #ff8c00;
+}
+.analysis-btn.primary:hover {
+  background: rgba(255, 140, 0, 0.1);
+  box-shadow: 0 0 8px rgba(255, 140, 0, 0.25);
+}
+
+/* ── PhD Badge ───────────────────────────────────────────────── */
+.phd-badge {
+  font-size: 7px;
+  border: 1px solid rgba(187, 134, 252, 0.4);
+  padding: 1px 6px;
+  color: #bb86fc;
+  background: rgba(187, 134, 252, 0.05);
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+/* ── Divergence Alert ────────────────────────────────────────── */
+.divergence-alert {
+  margin: 0 10px 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 51, 51, 0.25);
+  background: rgba(255, 51, 51, 0.03);
+  border-radius: 2px;
 }
 
 /* ── Status dots ─────────────────────────────────────────────── */
@@ -181,6 +347,403 @@ pre.reasoning-block {
 }
 .custom-tooltip.visible { display: block; }
 
+/* ── Weather Map ─────────────────────────────────────────────── */
+.weather-map-container {
+  position: relative;
+  background: #050505;
+  border-bottom: 1px solid #111;
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.weather-map-leaflet {
+  width: 100%;
+  height: 320px;
+  background: #0a0a0a;
+  z-index: 1;
+}
+
+.weather-map-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: #0a0a0a;
+  border-bottom: 1px solid #111;
+  z-index: 2;
+  position: relative;
+}
+
+.weather-map-btn {
+  background: transparent;
+  border: 1px solid #222;
+  color: #555;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 2px 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.weather-map-btn:hover {
+  border-color: #ff8c00;
+  color: #ff8c00;
+}
+.weather-map-btn.active {
+  border-color: #ff8c00;
+  color: #ff8c00;
+  background: rgba(255, 140, 0, 0.08);
+}
+
+.weather-map-station-label {
+  font-size: 8px;
+  color: #555;
+  font-weight: 600;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.weather-map-icao {
+  color: #333;
+}
+
+.weather-map-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 320px;
+  color: #ff8c00;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.weather-map-loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ff8c00/20;
+  border-top-color: #ff8c00;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Station Markers ────────────────────────────────────────── */
+.weather-station-marker {
+  background: none !important;
+  border: none !important;
+}
+
+.station-marker-container {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.station-marker-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--marker-color);
+  box-shadow: 0 0 8px var(--marker-color), 0 0 16px var(--marker-color);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  transition: all 0.3s ease;
+}
+
+.station-marker-ring {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--marker-color);
+  opacity: 0.3;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+}
+
+.station-marker-pulse .station-marker-ring {
+  animation: marker-pulse 2s ease-out infinite;
+}
+
+@keyframes marker-pulse {
+  0% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); }
+  70% { opacity: 0; transform: translate(-50%, -50%) scale(2.2); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(2.2); }
+}
+
+.station-marker-selected .station-marker-dot {
+  width: 12px;
+  height: 12px;
+  box-shadow: 0 0 10px var(--glow-color), 0 0 24px var(--glow-color), 0 0 40px rgba(255, 140, 0, 0.3);
+}
+.station-marker-selected .station-marker-ring {
+  border-color: #ff8c00;
+  width: 28px;
+  height: 28px;
+}
+
+.station-marker-label {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+  z-index: 3;
+}
+
+.station-marker-icao {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7px;
+  font-weight: 600;
+  color: #888;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+  z-index: 3;
+}
+
+/* ── Station Popups — Bloomberg dark ─────────────────────────── */
+.station-popup .leaflet-popup-content-wrapper {
+  background: #111 !important;
+  border: 1px solid #ff8c00 !important;
+  border-radius: 2px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255, 140, 0, 0.4) !important;
+  padding: 0 !important;
+}
+.station-popup .leaflet-popup-content {
+  margin: 0 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 9px !important;
+  color: #ccc !important;
+}
+.station-popup .leaflet-popup-tip {
+  background: #111 !important;
+  border: 1px solid #ff8c00 !important;
+  border-top: none !important;
+  border-left: none !important;
+  box-shadow: none !important;
+}
+.station-popup .leaflet-popup-close-button {
+  color: #555 !important;
+  font-size: 16px !important;
+  top: 4px !important;
+  right: 4px !important;
+}
+.station-popup .leaflet-popup-close-button:hover {
+  color: #ff8c00 !important;
+}
+
+.station-popup-content {
+  padding: 8px 10px;
+}
+.station-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.station-popup-name {
+  font-weight: 700;
+  font-size: 10px;
+  color: #ff8c00;
+}
+.station-popup-icao {
+  font-size: 8px;
+  color: #555;
+  font-weight: 600;
+}
+.station-popup-coords {
+  font-size: 7px;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+.station-popup-section {
+  border-top: 1px solid #222;
+  padding-top: 5px;
+  margin-top: 5px;
+}
+.station-popup-section-title {
+  font-size: 7px;
+  font-weight: 800;
+  color: #ff8c00;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+
+.station-popup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+}
+.station-popup-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px;
+  padding: 1px 0;
+}
+.station-popup-metric-label {
+  font-size: 7px;
+  color: #555;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.station-popup-metric-value {
+  font-size: 9px;
+  font-weight: 700;
+  color: #ccc;
+}
+.station-popup-muted {
+  color: #555 !important;
+}
+
+/* Leaflet control overrides for dark theme */
+.leaflet-control-zoom a {
+  background: #111 !important;
+  color: #888 !important;
+  border-color: #222 !important;
+}
+.leaflet-control-zoom a:hover {
+  background: #1a1a1a !important;
+  color: #ff8c00 !important;
+}
+
+/* ── Map Body Layout (map + HUD side-by-side) ───────────────── */
+.weather-map-body {
+  display: flex;
+  position: relative;
+  height: 480px;
+}
+.weather-map-body .weather-map-leaflet {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+}
+
+/* ── Layer Toggle Strip ─────────────────────────────────────── */
+.wm-layer-toggles {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+/* ── Edge badge on markers ──────────────────────────────────── */
+.station-marker-edge {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7px;
+  font-weight: 800;
+  padding: 1px 3px;
+  background: #000;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  white-space: nowrap;
+  z-index: 10;
+  text-shadow: none;
+}
+
+/* ── Analysis HUD Overlay ── Bloomberg-style floating panel ── */
+.wm-analysis-hud {
+  width: 240px;
+  height: 100%;
+  overflow-y: auto;
+  background: rgba(5, 5, 5, 0.92);
+  border-left: 1px solid #111;
+  backdrop-filter: blur(8px);
+  font-family: 'JetBrains Mono', monospace;
+  z-index: 5;
+  flex-shrink: 0;
+}
+
+.wm-analysis-hud::-webkit-scrollbar { width: 3px; }
+.wm-analysis-hud::-webkit-scrollbar-track { background: transparent; }
+.wm-analysis-hud::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
+
+.wm-hud-section {
+  padding: 6px 8px;
+  border-bottom: 1px solid #111;
+}
+
+.wm-hud-title {
+  font-size: 7px;
+  font-weight: 800;
+  color: #ff8c00;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+  text-shadow: 0 0 8px rgba(255, 140, 0, 0.15);
+}
+
+.wm-hud-hero {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.wm-hud-sub {
+  font-size: 8px;
+  color: #555;
+  font-weight: 600;
+}
+
+.wm-hud-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 8px;
+  padding: 1px 0;
+  color: #888;
+}
+.wm-hud-row span:first-child {
+  color: #555;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 7px;
+}
+.wm-hud-row span:last-child {
+  font-weight: 700;
+  color: #ccc;
+}
+
+.wm-hud-bracket-name {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-hud-bracket-vals {
+  display: flex;
+  gap: 6px;
+  font-size: 8px;
+  font-weight: 700;
+}
+
 /* ── Mobile Scroll Wrapper ───────────────────────────────────── */
 .mobile-scroll-wrapper {
   overflow-x: auto;
@@ -212,9 +775,11 @@ pre.reasoning-block {
   #col-center { flex: none !important; overflow: visible !important; height: auto !important; min-height: 0; }
   #col-right { flex: none !important; border-left: none !important; border-top: 1px solid #222; overflow: visible !important; height: auto !important; min-height: 0; }
 
-  #analysis-content {
-    gap: 4px !important;
-  }
+  /* Analysis view — keep compact on mobile */
+  .analysis-view { gap: 4px; padding: 2px; }
+  .analysis-grid-2 { grid-template-columns: 1fr !important; gap: 4px; }
+  .signal-hero { flex-direction: column; padding: 8px; }
+  .live-temp-row { flex-wrap: wrap; gap: 6px; }
 
   #analysis-content, #panel-brackets, #panel-strategy, #outcomes-list {
     overflow: visible !important; position: relative; z-index: 1;
@@ -271,7 +836,50 @@ pre.reasoning-block {
   /* Atmospheric grid — 2-col on mobile */
   #panel-atmospheric .grid { grid-template-columns: repeat(2, 1fr) !important; }
 
-  /* Tooltip — wider on mobile */
+  /* ── Bracket Analysis Panel — mobile optimizations ── */
+  #panel-brackets-v2 {
+    overflow: visible !important;
+    position: relative;
+    z-index: 1;
+  }
+  #bracket-scroll {
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+  }
+  #bracket-scroll::after {
+    content: '';
+    position: sticky;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    float: right;
+    width: 16px;
+    height: 100%;
+    background: linear-gradient(to right, transparent, rgba(0,0,0,0.5));
+    pointer-events: none;
+  }
+  #bracket-scroll::-webkit-scrollbar { height: 3px; }
+  #bracket-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  #panel-brackets-v2 table th,
+  #panel-brackets-v2 table td { font-size: 9px; }
+
+  /* Factor panel — larger touch targets for toggles */
+  #panel-factors .space-y-\\[2px\\] > * {
+    margin-bottom: 4px !important;
+  }
+  #panel-factors button {
+    min-height: 32px;
+    min-width: 32px;
+  }
+
+  /* Tooltip — wider on mobile, wraps nicely */
   .custom-tooltip { max-width: 85vw; font-size: 11px; padding: 10px 14px; }
+
+  /* Weather map — stack HUD below map */
+  .weather-map-body { flex-direction: column; height: auto; }
+  .weather-map-body .weather-map-leaflet { height: 280px; }
+  .wm-analysis-hud { width: 100%; height: auto; max-height: 300px; border-left: none; border-top: 1px solid #111; }
+  .wm-layer-toggles { gap: 2px; }
+  .weather-map-btn { font-size: 7px; padding: 3px 6px; }
 }
 

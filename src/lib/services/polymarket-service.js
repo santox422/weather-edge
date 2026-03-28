@@ -47,10 +47,23 @@ function buildEventSlug(citySlug, date) {
  */
 async function fetchClobPrice(tokenId) {
   try {
-    const res = await fetch(`${CLOB_API}/price?token_id=${tokenId}&side=buy`);
+    const res = await fetch(`${CLOB_API}/book?token_id=${tokenId}`);
     if (!res.ok) return null;
     const data = await res.json();
-    return parseFloat(data.price) || null;
+    const bids = data.bids || [];
+    const asks = data.asks || [];
+    const bestBid = bids.length > 0 ? parseFloat(bids[0].price) : NaN;
+    const bestAsk = asks.length > 0 ? parseFloat(asks[0].price) : NaN;
+
+    if (!isNaN(bestBid) && !isNaN(bestAsk)) {
+      return (bestBid + bestAsk) / 2;
+    } else if (!isNaN(bestBid)) {
+      return bestBid;
+    } else if (!isNaN(bestAsk)) {
+      return bestAsk >= 0.95 ? 0 : bestAsk / 2;
+    } else {
+      return null; // Fallback to Gamma if order book corresponds to no liquidity
+    }
   } catch {
     return null;
   }

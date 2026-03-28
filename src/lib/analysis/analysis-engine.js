@@ -20,6 +20,7 @@ import {
   getSolarRadiation,
   getSoilConditions,
   getHourlyTemperatureCurve,
+  getWundergroundHistory,
 } from "../services/weather-service.js";
 import { resolveCity } from "./city-resolver.js";
 
@@ -28,6 +29,7 @@ import {
   processEnsembleData,
   computeBracketProbabilities,
   computeDeterministicBracketProbs,
+  computePerModelBracketProbs,
   blendBracketProbabilities,
   calculateEnsembleProbability,
   applyMETARConstraint,
@@ -130,10 +132,10 @@ export async function analyzeMarket(market) {
     // which blends ensemble + deterministic pseudo-members with bias correction.
     // Applying it here would be wasted computation since 2a overwrites the result.
     try {
-      analysis.stationBias = await getStationBias(city.lat, city.lon, 90);
+      analysis.stationBias = await getStationBias(city.lat, city.lon, 90, city.icao);
       if (analysis.stationBias?.reliable && analysis.stationBias.bias !== 0) {
         console.log(
-          `[BIAS] ${analysis.stationBias.bias > 0 ? "+" : ""}${analysis.stationBias.bias.toFixed(2)}°C correction for ${city.matchedKey} (applied in step 2a)`,
+          `[BIAS] ${analysis.stationBias.bias > 0 ? "+" : ""}${analysis.stationBias.bias.toFixed(2)}°C correction for ${city.matchedKey} (truth: ${analysis.stationBias.truthSource}, applied in step 2a)`,
         );
       }
     } catch (err) {
@@ -165,43 +167,77 @@ export async function analyzeMarket(market) {
     if (analysis.ensemble?.bracketProbabilities) {
       analysis.ensemble.rawBracketProbabilities = analysis.ensemble.bracketProbabilities;
     }
-    if (analysis.ensemble?.bracketProbabilities && analysis.multiModel?.consensus?.predictions) {
-      const preds = analysis.multiModel.consensus.predictions.filter(p => p.maxTemp != null);
 
-      if (preds.length > 0) {
-        // Bias correction (discounted 50%: ERA5 reanalysis vs Wunderground station)
-        const bias = (analysis.stationBias?.reliable && analysis.stationBias.bias !== 0)
-          ? analysis.stationBias.bias * 0.5 : 0;
+    // Hoist BMA variables so they're accessible for factor adjustments later (step 5g)
+    let bmaPreds = [];
+    let bmaBias = 0;
+    let bmaEnsWeightTotal = modelConfig.ensembleWeights
+      ? Object.values(modelConfig.ensembleWeights).reduce((a, b) => a + b, 0)
+      : 4.0;
+    let bmaDetWeightTotal = 0;
+
+    if (analysis.ensemble?.bracketProbabilities && analysis.multiModel?.consensus?.predictions) {
+      bmaPreds = analysis.multiModel.consensus.predictions.filter(p => p.maxTemp != null);
+
+      if (bmaPreds.length > 0) {
+        // Bias correction: use monthly (seasonal) bias if available for resolution month,
+        // otherwise fall back to overall bias. biasDiscounted already applies the
+        // truth-source discount (WU=100%, ERA5=50%).
+        if (analysis.stationBias?.reliable && analysis.stationBias.bias !== 0) {
+          // Try month-specific bias first (captures seasonal model behavior)
+          const resMonth = market.endDate ? (new Date(market.endDate).getMonth() + 1).toString() : null;
+          const monthlyEntry = resMonth && analysis.stationBias.monthly?.[resMonth];
+          if (monthlyEntry && monthlyEntry.sampleSize >= 5) {
+            bmaBias = monthlyEntry.bias * (analysis.stationBias.discount ?? 0.5);
+            console.log(`[BIAS] Using monthly bias for month ${resMonth}: ${bmaBias > 0 ? '+' : ''}${bmaBias.toFixed(2)}°C (n=${monthlyEntry.sampleSize})`);
+          } else {
+            bmaBias = analysis.stationBias.biasDiscounted ?? (analysis.stationBias.bias * 0.5);
+          }
+        }
 
         // Stream 1: Ensemble KDE (re-compute with bias correction)
         const ensBrackets = analysis.ensemble.memberMaxes
-          ? computeBracketProbabilities(analysis.ensemble.memberMaxes, market.outcomes, bias, market.unit || 'C')
+          ? computeBracketProbabilities(analysis.ensemble.memberMaxes, market.outcomes, bmaBias, market.unit || 'C')
           : analysis.ensemble.bracketProbabilities;
 
         // Stream 2: Deterministic per-model Gaussian (weighted by model quality)
         const detBrackets = computeDeterministicBracketProbs(
-          preds, market.outcomes, daysUntilResolution || 1, bias, market.unit || 'C'
+          bmaPreds, market.outcomes, daysUntilResolution || 1, bmaBias, market.unit || 'C'
         );
 
         // BMA blend by total model weight per stream
-        const ensWeightTotal = modelConfig.ensembleWeights
-          ? Object.values(modelConfig.ensembleWeights).reduce((a, b) => a + b, 0)
-          : 4.0;
-        const detWeightTotal = preds.reduce((s, p) => s + (p.weight || 1), 0);
+        bmaDetWeightTotal = bmaPreds.reduce((s, p) => s + (p.weight || 1), 0);
 
         analysis.ensemble.bracketProbabilities = blendBracketProbabilities(
-          ensBrackets, detBrackets, ensWeightTotal, detWeightTotal
+          ensBrackets, detBrackets, bmaEnsWeightTotal, bmaDetWeightTotal
         );
 
+        // Compute per-model individual bracket probabilities for UI breakdown
+        analysis.perModelBrackets = computePerModelBracketProbs(
+          bmaPreds, market.outcomes, daysUntilResolution || 1, bmaBias, market.unit || 'C'
+        );
+
+        // Add ensemble KDE as a pseudo-model entry so UI can show it alongside deterministic models
+        if (ensBrackets) {
+          analysis.perModelBrackets.unshift({
+            model: 'ENS_KDE',
+            weight: bmaEnsWeightTotal,
+            maxTemp: null,
+            isEnsemble: true,
+            memberCount: analysis.ensemble.memberMaxes?.length || 0,
+            brackets: ensBrackets.map(b => ({ name: b.name, prob: b.forecastProb })),
+          });
+        }
+
         analysis.ensemble.bmaBlend = {
-          ensWeight: ensWeightTotal,
-          detWeight: detWeightTotal,
-          ensFraction: (ensWeightTotal / (ensWeightTotal + detWeightTotal) * 100).toFixed(0) + '%',
-          detFraction: (detWeightTotal / (ensWeightTotal + detWeightTotal) * 100).toFixed(0) + '%',
-          detModels: preds.length,
+          ensWeight: bmaEnsWeightTotal,
+          detWeight: bmaDetWeightTotal,
+          ensFraction: (bmaEnsWeightTotal / (bmaEnsWeightTotal + bmaDetWeightTotal) * 100).toFixed(0) + '%',
+          detFraction: (bmaDetWeightTotal / (bmaEnsWeightTotal + bmaDetWeightTotal) * 100).toFixed(0) + '%',
+          detModels: bmaPreds.length,
           daysOut: daysUntilResolution || 1,
         };
-        console.log(`[BMA] Blend: ensemble ${analysis.ensemble.bmaBlend.ensFraction} (wt ${ensWeightTotal.toFixed(1)}) + deterministic ${analysis.ensemble.bmaBlend.detFraction} (wt ${detWeightTotal.toFixed(1)}, ${preds.length} models) | ${daysUntilResolution || 1}d lead`);
+        console.log(`[BMA] Blend: ensemble ${analysis.ensemble.bmaBlend.ensFraction} (wt ${bmaEnsWeightTotal.toFixed(1)}) + deterministic ${analysis.ensemble.bmaBlend.detFraction} (wt ${bmaDetWeightTotal.toFixed(1)}, ${bmaPreds.length} models) | ${daysUntilResolution || 1}d lead`);
       }
     }
 
@@ -263,37 +299,40 @@ export async function analyzeMarket(market) {
     }
 
     try {
-      analysis.liveWeather = await getStationMETAR(city.icao);
-    } catch (err) {
-      console.log(
-        `[WARN] METAR unavailable for ${city.matchedKey} (${city.icao}): ${err.message}`,
-      );
-    }
-
-    // 5b. Apply METAR constraint — eliminate impossible brackets for same-day markets
-    if (analysis.liveWeather?.maxToday != null && analysis.ensemble?.bracketProbabilities) {
       const todayStr = new Date().toISOString().split('T')[0];
       const marketDateStr = market.endDate ? new Date(market.endDate).toISOString().split('T')[0] : null;
       const isToday = marketDateStr === todayStr;
+      const isPast = marketDateStr && marketDateStr < todayStr;
 
       if (isToday) {
-        const metarResult = applyMETARConstraint(
-          analysis.ensemble.bracketProbabilities,
-          analysis.liveWeather.maxToday,
-          market.unit || 'C',
-          true
-        );
-        if (metarResult.applied) {
-          analysis.ensemble.bracketProbabilities = metarResult.adjusted;
-          analysis.metarConstraint = {
-            applied: true,
-            observedMaxC: metarResult.observedMaxC,
-            eliminatedBrackets: metarResult.adjusted.filter(b => b.metarEliminated).map(b => b.name),
-          };
-          console.log(`[METAR] Eliminated ${analysis.metarConstraint.eliminatedBrackets.length} brackets below observed max ${metarResult.observedMaxC}°C for ${city.matchedKey}`);
+        analysis.liveWeather = await getStationMETAR(city.icao);
+      } else if (isPast) {
+        // Fetch actual historical max for the exact past date
+        const offsetDays = Math.ceil((new Date(todayStr).getTime() - new Date(marketDateStr).getTime()) / (1000 * 3600 * 24)) + 5;
+        const wuHist = await getWundergroundHistory(city.icao, offsetDays);
+        if (wuHist) {
+          const targetIdx = wuHist.dates.indexOf(marketDateStr);
+          if (targetIdx !== -1) {
+            const pastMax = wuHist.maxTemps[targetIdx];
+            analysis.liveWeather = {
+              currentTemp: pastMax, // Use actual max for both so UI renders it as final
+              maxToday: pastMax,
+              lastUpdated: marketDateStr + 'T23:59:59Z',
+              icao: city.icao,
+              stationName: city.matchedKey,
+              wundergroundUrl: `https://www.wunderground.com/history/daily/${city.icao}/${marketDateStr}`
+            };
+            console.log(`[PAPER] Using actual historical max (${pastMax}°C) for ${city.matchedKey} on ${marketDateStr}`);
+          }
         }
+      } else {
+        analysis.liveWeather = null;
       }
+    } catch (err) {
+      console.log(`[WARN] METAR/History unavailable for ${city.matchedKey} (${city.icao}): ${err.message}`);
     }
+
+    // 5b. (METAR constraint moved to 5h — must apply AFTER factor adjustments)
 
     // 5c. Fetch solar radiation data
     try {
@@ -319,50 +358,7 @@ export async function analyzeMarket(market) {
       console.log(`[WARN] Hourly curve unavailable for ${city.matchedKey}: ${err.message}`);
     }
 
-    // 5f. Run all 7 advanced analysis factors
-    try {
-      analysis.advancedFactors = runAllAdvancedFactors({
-        hourlyCurve: analysis.hourlyCurve,
-        soilData: analysis.soilConditions,
-        solarData: analysis.solarRadiation,
-        atmospheric: analysis.atmospheric,
-        city,
-        market: { ...market, lat: city.lat, lon: city.lon },
-      });
-    } catch (err) {
-      console.log(`[WARN] Advanced factors failed for ${city.matchedKey}: ${err.message}`);
-    }
-
-    // 5g. Apply probability matrix adjustments from advanced factors
-    if (analysis.advancedFactors && analysis.ensemble?.bracketProbabilities) {
-      try {
-        const matrixResult = applyFactorAdjustments(
-          analysis.ensemble.bracketProbabilities,
-          analysis.advancedFactors,
-          analysis.ensemble.memberMaxes,
-          market.outcomes,
-          market.unit || 'C'
-        );
-        if (matrixResult.applied) {
-          analysis.ensemble.preFactorBracketProbabilities = analysis.ensemble.bracketProbabilities;
-          analysis.ensemble.bracketProbabilities = matrixResult.adjusted;
-          analysis.factorAdjustment = matrixResult.breakdown;
-          console.log(`[FACTORS] Applied probability shift: ${matrixResult.breakdown.shiftDirection} ${matrixResult.breakdown.effectiveShift.toFixed(2)}°C for ${city.matchedKey}`);
-        }
-      } catch (err) {
-        console.log(`[WARN] Factor adjustment failed for ${city.matchedKey}: ${err.message}`);
-      }
-    }
-
-    // 6. Compute forecast skill decay
-    analysis.forecastSkill = computeForecastSkillDecay(daysUntilResolution);
-
-    // 7. Compute ensemble spread score if ensemble data available
-    if (analysis.ensemble?.timeSteps?.length > 0) {
-      analysis.spreadScore = computeSpreadScore(analysis.ensemble);
-    }
-
-    // 8. Get forecast trajectory (how prediction evolved)
+    // 5e2. Get forecast trajectory (moved before factors so Factor 12 can use it)
     try {
       if (market.endDate) {
         const targetDate = new Date(market.endDate).toISOString().split("T")[0];
@@ -378,6 +374,125 @@ export async function analyzeMarket(market) {
         `[WARN] Trajectory unavailable for ${city.matchedKey}: ${err.message}`,
       );
     }
+
+    // 5f. Run all 12 advanced analysis factors (including new PhD-level factors)
+    try {
+      analysis.advancedFactors = runAllAdvancedFactors({
+        hourlyCurve: analysis.hourlyCurve,
+        soilData: analysis.soilConditions,
+        solarData: analysis.solarRadiation,
+        atmospheric: analysis.atmospheric,
+        city,
+        market: { ...market, lat: city.lat, lon: city.lon },
+        trajectory: analysis.trajectory,
+      });
+    } catch (err) {
+      console.log(`[WARN] Advanced factors failed for ${city.matchedKey}: ${err.message}`);
+    }
+
+    // 5g. Apply probability matrix adjustments from advanced factors
+    // Pass deterministic predictions, BMA weights, bias, and lead time so the
+    // probability matrix can perform a full dual-stream re-KDE + BMA re-blend
+    // instead of only shifting ensemble members (which would drop det models).
+    if (analysis.advancedFactors && analysis.ensemble?.bracketProbabilities) {
+      try {
+        let metarFloorC = null;
+        if (analysis.liveWeather?.maxToday != null) {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const marketDateStr = market.endDate ? new Date(market.endDate).toISOString().split('T')[0] : null;
+          if (marketDateStr === todayStr || (marketDateStr && marketDateStr < todayStr)) {
+            metarFloorC = analysis.liveWeather.maxToday;
+          }
+        }
+
+        const matrixResult = applyFactorAdjustments(
+          analysis.ensemble.bracketProbabilities,
+          analysis.advancedFactors,
+          analysis.ensemble.memberMaxes,
+          market.outcomes,
+          market.unit || 'C',
+          // pass BMA parameters for dual-stream re-blend
+          bmaPreds.length > 0 ? bmaPreds : null,
+          bmaEnsWeightTotal,
+          bmaDetWeightTotal,
+          daysUntilResolution || 1,
+          bmaBias,
+          metarFloorC
+        );
+        if (matrixResult.applied) {
+          analysis.ensemble.preFactorBracketProbabilities = analysis.ensemble.bracketProbabilities;
+          analysis.ensemble.bracketProbabilities = matrixResult.adjusted;
+          analysis.factorAdjustment = matrixResult.breakdown;
+          // Store ENS-shifted brackets separately for the ENS+PhD UI column
+          if (matrixResult.ensShiftedBrackets) {
+            analysis.ensemble.ensShiftedBrackets = matrixResult.ensShiftedBrackets;
+          }
+          console.log(`[FACTORS] Applied probability shift: ${matrixResult.breakdown.shiftDirection} ${matrixResult.breakdown.effectiveShift.toFixed(2)}°C (blend=${matrixResult.breakdown.blendAlpha}) for ${city.matchedKey}`);
+        }
+      } catch (err) {
+        console.log(`[WARN] Factor adjustment failed for ${city.matchedKey}: ${err.message}`);
+      }
+    }
+
+    // 5h. Apply METAR constraint — AFTER factor adjustments!
+    // The re-KDE in 5g shifts all members and re-integrates from scratch,
+    // so any prior METAR elimination would be undone. We apply it last
+    // to ensure brackets below the observed station max are permanently zeroed.
+    if (analysis.liveWeather?.maxToday != null && analysis.ensemble?.bracketProbabilities) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const marketDateStr = market.endDate ? new Date(market.endDate).toISOString().split('T')[0] : null;
+      const isToday = marketDateStr === todayStr;
+      const isPast = marketDateStr && marketDateStr < todayStr;
+
+      if (isToday || isPast) {
+        // Save pre-METAR unmodified distributions for the client UI overriding
+        analysis.ensemble.preMetarBracketProbabilities = [...analysis.ensemble.bracketProbabilities];
+        if (analysis.ensemble.ensShiftedBrackets) {
+          analysis.ensemble.preMetarEnsShiftedBrackets = [...analysis.ensemble.ensShiftedBrackets];
+        }
+
+        // Apply METAR to the primary BMA+PhD blend
+        const metarResult = applyMETARConstraint(
+          analysis.ensemble.bracketProbabilities,
+          analysis.liveWeather.maxToday,
+          market.unit || 'C',
+          true
+        );
+        
+        // Also apply METAR to the raw ENS+PhD stream for UI consistency
+        if (analysis.ensemble.ensShiftedBrackets) {
+          const ensMetarResult = applyMETARConstraint(
+            analysis.ensemble.ensShiftedBrackets,
+            analysis.liveWeather.maxToday,
+            market.unit || 'C',
+            true
+          );
+          if (ensMetarResult.applied) {
+            analysis.ensemble.ensShiftedBrackets = ensMetarResult.adjusted;
+          }
+        }
+        
+        if (metarResult.applied) {
+          analysis.ensemble.bracketProbabilities = metarResult.adjusted;
+          analysis.metarConstraint = {
+            applied: true,
+            observedMaxC: metarResult.observedMaxC,
+            eliminatedBrackets: metarResult.adjusted.filter(b => b.metarEliminated).map(b => b.name),
+          };
+          console.log(`[METAR] Eliminated ${analysis.metarConstraint.eliminatedBrackets.length} brackets below observed max ${metarResult.observedMaxC}°C for ${city.matchedKey}`);
+        }
+      }
+    }
+
+    // 6. Compute forecast skill decay
+    analysis.forecastSkill = computeForecastSkillDecay(daysUntilResolution);
+
+    // 7. Compute ensemble spread score if ensemble data available
+    if (analysis.ensemble?.timeSteps?.length > 0) {
+      analysis.spreadScore = computeSpreadScore(analysis.ensemble);
+    }
+
+    // 8. Forecast trajectory — already fetched in step 5e2 (needed by Factor 12)
 
     // 9. Compute composite edge score
     analysis.edge = computeEdgeScore(analysis);

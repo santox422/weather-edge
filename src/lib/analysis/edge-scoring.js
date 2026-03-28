@@ -213,6 +213,12 @@ export function computeConfidence(daysUntilResolution, ensemble, modelDivergence
     else if (synoptic?.pattern === 'FRONTAL_PASSAGE') synopticMult = 0.88;
     else if (synoptic?.pattern === 'POST_FRONT_CLEARING') synopticMult = 0.92;
     else if (synoptic?.pattern === 'TRANSITIONAL') synopticMult = 0.90;
+
+    // Humidity/dew point ceilings active = clear physical constraint = more predictable
+    const humCeiling = advancedFactors.factors.find(f => f.factor === 'humidity_ceiling');
+    const dewCeiling = advancedFactors.factors.find(f => f.factor === 'dew_point_ceiling');
+    if (humCeiling && Math.abs(humCeiling.adjustment) > 0.3) synopticMult *= 1.03;
+    if (dewCeiling && Math.abs(dewCeiling.adjustment) > 0.3) synopticMult *= 1.03;
   }
 
   // All factors are multiplicative so they scale proportionally without

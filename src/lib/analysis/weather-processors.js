@@ -50,6 +50,7 @@ export function processAtmosphericData(atmData, market) {
   };
 
   return {
+    temperature: avg('temperature_2m'),
     humidity: avg('relative_humidity_2m'),
     dewPoint: avg('dew_point_2m'),
     windSpeed: avg('wind_speed_10m'),
@@ -62,6 +63,9 @@ export function processAtmosphericData(atmData, market) {
     visibility: avg('visibility'),
     precipProbability: max('precipitation_probability'),
     precipitation: avg('precipitation'),
+    // Boundary layer height — shallow BLH (<500m) traps surface heat / inversions,
+    // deep BLH (>1500m) indicates good mixing and more predictable surface temps
+    boundaryLayerHeight: avg('boundary_layer_height'),
     // Dew point depression — indicator of atmospheric stability
     dewPointDepression: avg('temperature_2m') != null && avg('dew_point_2m') != null
       ? avg('temperature_2m') - avg('dew_point_2m')

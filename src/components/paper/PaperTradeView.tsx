@@ -1,71 +1,60 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { PaperAnalysis, PaperAnalysisCity, PaperBracket, HCCityData } from '@/types';
-
-interface ActualData {
-  [citySlug: string]: { temp: number | null; source: string };
-}
+import { edgeColorClass } from '@/lib/analysis/constants';
 
 export default function PaperTradeView() {
-  const [loaded, setLoaded] = useState(false);
-  const [allDates, setAllDates] = useState<string[]>([]);
-  const [marketDates, setMarketDates] = useState<Set<string>>(new Set());
-  const [analysisCache, setAnalysisCache] = useState<Record<string, PaperAnalysis>>({});
-  const [actualsCache, setActualsCache] = useState<Record<string, ActualData>>({});
-  const [hondaData, setHondaData] = useState<Record<string, HCCityData[]>>({});
+  const [data, setData] = useState<any>(null);
+  const [status, setStatus] = useState({ text: 'Loading backend metrics...', color: '#ff8c00' });
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [expandedCities, setExpandedCities] = useState<Set<string>>(new Set());
-  const [status, setStatus] = useState({ text: 'Loading...', color: '#ff8c00' });
+  const [savingSettings, setSavingSettings] = useState(false);
 
-  useEffect(() => {
-    if (!loaded) { setLoaded(true); loadEverything(); }
-  }, [loaded]);
+  // Form State
+  const [config, setConfig] = useState({
+    capital: 10000,
+    trade_size_pct: 0.02,
+    scan_start_hours: 24,
+    max_entry_price: 0.60,
+    allow_entries: true
+  });
 
-  const loadEverything = async () => {
-    setStatus({ text: 'Loading...', color: '#ff8c00' });
+  const loadDashboard = async () => {
+    setStatus({ text: 'Syncing SQLite database...', color: '#ff8c00' });
     try {
-      const [datesRes, hondaRes] = await Promise.all([
-        fetch('/api/paper/dates'),
-        fetch('/api/paper/honda-all'),
-      ]);
-      const datesData = await datesRes.json();
-      const hondaAllData = await hondaRes.json();
-
-      const dates = datesData.dates || [];
-      const mkts = new Set<string>(datesData.marketDates || []);
-      setAllDates(dates);
-      setMarketDates(mkts);
-      setHondaData(hondaAllData.dates || {});
+      const res = await fetch('/api/paper/dashboard');
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      
+      setData(json);
+      setConfig(json.settings);
 
       const today = new Date().toISOString().split('T')[0];
       setExpandedDates(new Set<string>([today]));
-      setStatus({ text: `✓ ${dates.length} dates loaded`, color: '#00ff41' });
-
-      // Progressive: fetch analysis + actuals for each date
-      for (const date of dates) {
-        if (mkts.has(date)) {
-          try {
-            setStatus({ text: `Analyzing ${date}...`, color: '#ff8c00' });
-            const [analysisRes, actualsRes] = await Promise.all([
-              fetch(`/api/paper/analyze/${date}`),
-              fetch(`/api/paper/actuals/${date}`),
-            ]);
-            const analysis = await analysisRes.json();
-            const actuals = await actualsRes.json();
-            if (!analysis.error) {
-              setAnalysisCache(prev => ({ ...prev, [date]: analysis }));
-            }
-            if (actuals.actuals) {
-              setActualsCache(prev => ({ ...prev, [date]: actuals.actuals }));
-            }
-          } catch {}
-        }
-      }
-      setStatus({ text: `✓ ${dates.length} dates · analysis complete`, color: '#00ff41' });
+      setStatus({ text: `✓ Live reporting active connected to SQLite`, color: '#00ff41' });
     } catch (err: any) {
       setStatus({ text: `Error: ${err.message}`, color: '#ff3333' });
     }
+  };
+
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const saveSettings = async (e: any) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    try {
+      await fetch('/api/paper/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      setStatus({ text: '✓ Configuration updated safely', color: '#00ff41' });
+    } catch (err: any) {
+      setStatus({ text: `Error saving config: ${err.message}`, color: '#ff3333' });
+    }
+    setSavingSettings(false);
   };
 
   const toggleDate = useCallback((date: string) => {
@@ -84,342 +73,258 @@ export default function PaperTradeView() {
     });
   }, []);
 
-  const normCity = (name: string) => name?.toLowerCase().replace(/[\s-]/g, '').replace('newyorkcity', 'nyc') || '';
-  const today = new Date().toISOString().split('T')[0];
-
-  const ALL_CITIES = [
-    'Ankara','Atlanta','Buenos Aires','Chicago','Dallas','London',
-    'Miami','Milan','Munich','New York City','Paris','Sao Paulo',
-    'Seattle','Seoul','Toronto','Wellington'
-  ];
-
-  const citySlugMap: Record<string, string> = {
-    'ankara': 'ankara', 'atlanta': 'atlanta', 'buenosaires': 'buenos-aires',
-    'chicago': 'chicago', 'dallas': 'dallas', 'london': 'london',
-    'miami': 'miami', 'milan': 'milan', 'munich': 'munich',
-    'nyc': 'nyc', 'paris': 'paris', 'saopaulo': 'sao-paulo',
-    'seattle': 'seattle', 'seoul': 'seoul', 'toronto': 'toronto',
-    'wellington': 'wellington',
-  };
-
-  const getSlug = (cityNorm: string) => citySlugMap[cityNorm] || cityNorm;
-
-  const getHondaFor = (slug: string, date: string): HCCityData | null => {
-    const dateCities = hondaData[date];
-    if (!dateCities) return null;
-    return dateCities.find((c: any) => normCity(c.city) === normCity(slug)) || null;
-  };
+  if (!data) return (
+    <main className="flex flex-col h-[calc(100vh-28px)] bg-black p-4 text-[10px] text-[#555] font-mono">
+      {status.text}
+    </main>
+  );
 
   return (
     <main className="flex flex-col h-[calc(100vh-28px)] overflow-hidden bg-black" id="tab-paper">
-      {/* Dashboard Bar */}
-      <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 bg-[#0a0a0a] border-b border-[#222]">
-        <DashStat label="MODE" value="DAILY LOG" color="#4fc3f7" />
-        <div className="w-px h-4 bg-[#222]" />
-        <DashStat label="DATES" value={`${allDates.length}`} />
-        <div className="w-px h-4 bg-[#222]" />
-        <DashStat label="MARKETS" value={`${marketDates.size}`} />
-        <div className="w-px h-4 bg-[#222]" />
-        <DashStat label="ANALYZED" value={`${Object.keys(analysisCache).length}`} color="#00ff41" />
-        <div className="w-px h-4 bg-[#222]" />
-        <DashStat label="HC DATES" value={`${Object.keys(hondaData).length}`} color="#00e676" />
-      </div>
-
-      {/* Status */}
+      {/* ── STATUS BAR ── */}
       <div className="px-2 py-1 bg-[#050505] border-b border-[#111] text-[8px] font-mono" style={{ color: status.color }}>
         {status.text}
       </div>
 
-      {/* Accordion */}
-      <div className="flex-1 overflow-auto px-1 py-1">
-        {allDates.length === 0 ? (
-          <div className="text-center py-8 text-[#333] text-[9px]">Loading market dates...</div>
-        ) : allDates.map(date => {
-          const analysis = analysisCache[date];
-          const actuals = actualsCache[date] || {};
-          const isMarketDate = marketDates.has(date);
-          const isToday = date === today;
-          const isFuture = date > today;
-          const dateExpanded = expandedDates.has(date);
-          const dateHonda = hondaData[date] || [];
-
-          // Build city set
-          const citySet = new Set<string>();
-          for (const name of ALL_CITIES) citySet.add(normCity(name));
-
-          return (
-            <div key={date}>
-              {/* Date Row */}
-              <div className="paper-date-row" onClick={() => toggleDate(date)}>
-                <span className="pc-chevron">{dateExpanded ? '▾' : '▸'}</span>
-                <span className={`pc-date-label ${isToday ? 'pc-green' : isFuture ? 'pc-amber' : 'pc-white'}`}>
-                  {date}{isToday ? ' (TODAY)' : ''}
-                </span>
-                <span className="pc-chips">
-                  {analysis ? (
-                    <>
-                      <span className="pc-muted">{analysis.cities.length} mkts</span>
-                      <span className="pc-sep">·</span>
-                      <span className="pc-ens">ENS ${analysis.totalEnsExpectedProfit}</span>
-                      <span className="pc-sep">·</span>
-                      <span className="pc-fcst">FCST ${analysis.totalFcstExpectedProfit}</span>
-                    </>
-                  ) : isMarketDate ? (
-                    <span className="pc-muted">analyzing…</span>
-                  ) : (
-                    <span className="pc-muted">no markets</span>
-                  )}
-                  {dateHonda.length > 0 && (
-                    <>
-                      <span className="pc-sep">│</span>
-                      <span className="pc-hc">HC: {dateHonda.length} cities</span>
-                    </>
-                  )}
-                </span>
+      <div className="flex-1 overflow-auto flex flex-col md:flex-row">
+        
+        {/* ── LEFT SIDEBAR: CONFIG & OVERALL PERFORMANCE ── */}
+        <div className="w-full md:w-[320px] shrink-0 border-r border-[#1a1a1a] bg-[#030303] overflow-y-auto">
+          {/* Engine Config */}
+          <div className="p-3 border-b border-[#1a1a1a]">
+            <h3 className="text-[9px] font-bold text-[#bb86fc] tracking-widest mb-3 uppercase flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#bb86fc]/50 animate-pulse"></span>
+              Autonomous Engine
+            </h3>
+            <form onSubmit={saveSettings} className="space-y-3 font-mono text-[9px]">
+              <div className="flex items-center justify-between">
+                <label className="text-[#888]">STARTING CAPITAL</label>
+                <div className="flex items-center bg-[#111] px-1.5 py-1 rounded-sm border border-[#222]">
+                  <span className="text-[#555]">$</span>
+                  <input type="number" className="bg-transparent text-[#eee] w-14 text-right outline-none ml-1 font-bold" 
+                    value={config.capital} onChange={e => setConfig({...config, capital: +e.target.value})} />
+                </div>
               </div>
+              <div className="flex items-center justify-between">
+                <label className="text-[#888]" title="Percentage of capital used per trade">TRADE SIZE %</label>
+                <div className="flex items-center bg-[#111] px-1.5 py-1 rounded-sm border border-[#222]">
+                  <input type="number" step="0.01" className="bg-transparent text-[#eee] w-12 text-right outline-none mr-1 font-bold" 
+                    value={config.trade_size_pct * 100} onChange={e => setConfig({...config, trade_size_pct: +(+e.target.value / 100).toFixed(4)})} />
+                  <span className="text-[#555]">%</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="text-[#888]" title="How many hours prior to market close to start scanning">ENTRY WINDOW</label>
+                <div className="flex items-center bg-[#111] px-1.5 py-1 rounded-sm border border-[#222]">
+                  <span className="text-[#555] mr-1">FINAL</span>
+                  <input type="number" className="bg-transparent text-[#eee] w-8 text-right outline-none mr-1 font-bold" 
+                    value={config.scan_start_hours} onChange={e => setConfig({...config, scan_start_hours: +e.target.value})} />
+                  <span className="text-[#555]">H</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="text-[#888]" title="Max allowed entry price (¢)">MAX YES PRICE</label>
+                <div className="flex items-center bg-[#111] px-1.5 py-1 rounded-sm border border-[#222]">
+                  <input type="number" step="0.01" className="bg-transparent text-[#eee] w-12 text-right outline-none mr-1 font-bold" 
+                    value={+(config.max_entry_price * 100).toFixed(0)} onChange={e => setConfig({...config, max_entry_price: +(+e.target.value / 100).toFixed(4)})} />
+                  <span className="text-[#555]">¢</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" className="accent-[#00e676]" 
+                    checked={config.allow_entries} onChange={e => setConfig({...config, allow_entries: e.target.checked})} />
+                  <span className="text-white font-bold">ENABLE TRADING</span>
+                </label>
+                <button disabled={savingSettings} className={`px-3 py-1 bg-[#111] border border-[#333] text-[#eee] rounded-sm transition-colors ${savingSettings ? 'opacity-50' : 'hover:bg-[#222] hover:border-[#00e676] active:bg-[#00e676] active:text-black cursor-pointer'}`}>
+                  {savingSettings ? 'SAVING...' : 'SAVE'}
+                </button>
+              </div>
+            </form>
+          </div>
 
-              {/* City Rows */}
-              {dateExpanded && [...citySet].sort().map(cityNorm => {
-                const slug = getSlug(cityNorm);
-                const an = analysis?.cities?.find((c: any) =>
-                  normCity(c.city) === cityNorm || normCity(c.cityName || '') === cityNorm
-                );
-                const cityKey = `${date}|${cityNorm}`;
-                const cityExpanded = expandedCities.has(cityKey);
-                const displayName = an?.cityName || ALL_CITIES.find(n => normCity(n) === cityNorm) || cityNorm;
-                const actual = actuals[slug];
-                const hc = getHondaFor(slug, date);
-                const hasData = an || hc;
-
-                // Determine the best YES bracket from analysis
-                const yesPick = an?.fcst?.yesBracket || an?.ens?.yesBracket;
-
+          {/* Model Portfolios */}
+          <div className="p-3">
+            <h3 className="text-[9px] font-bold text-[#888] tracking-widest mb-3 uppercase">STRATEGY PERFORMANCE</h3>
+            <div className="space-y-3">
+              {['ENS', 'BMA', 'ENS_PHD', 'BMA_PHD'].map(m => {
+                const port = data.portfolios[m];
+                if (!port) return null;
+                const roi = ((port.balance - port.startingCapital) / port.startingCapital) * 100;
                 return (
-                  <div key={cityKey}>
-                    <div className="paper-city-row" onClick={() => toggleCity(cityKey)}>
-                      <span className="pc-chevron">{cityExpanded ? '▾' : '▸'}</span>
-                      <span className="pc-city-name">{displayName}</span>
-                      <span className="pc-chips">
-                        {/* Actual temp */}
-                        {actual?.temp != null ? (
-                          <span className="pc-actual-temp">{Math.round(actual.temp)}°C</span>
-                        ) : actual?.source === 'future' ? (
-                          <span className="pc-muted">—</span>
-                        ) : (
-                          <span className="pc-muted">…</span>
-                        )}
-                        <span className="pc-sep">│</span>
-                        {/* Analysis summary */}
-                        {an ? (
-                          <>
-                            <span className="pc-fcst">FCST:{an.fcst.yesBracket} {an.fcst.yesProb}%</span>
-                            <span className="pc-sep">·</span>
-                            <span className="pc-ens">ENS:{an.ens.yesBracket} {an.ens.yesProb}%</span>
-                          </>
-                        ) : (
-                          <span className="pc-muted">no mkt</span>
-                        )}
-                        {/* Honda Civic summary */}
-                        {hc && (
-                          <>
-                            <span className="pc-sep">│</span>
-                            <span className="pc-hc">
-                              HC: {hc.mainYesBracket || '?'} ${hc.totalCost?.toFixed(0)}
-                              {hc.estimatedPnl != null && (
-                                <span className={(hc.estimatedPnl || 0) >= 0 ? 'pc-green' : 'pc-red'}>
-                                  {' '}{(hc.estimatedPnl || 0) >= 0 ? '+' : ''}{hc.estimatedPnl?.toFixed(0)}
-                                </span>
-                              )}
-                            </span>
-                          </>
-                        )}
+                  <div key={m} className="bg-[#0c0c0c] border border-[#1a1a1a] p-2 rounded-sm font-mono">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[10px] font-bold text-white">{m.replace('_', '+')}</span>
+                      <span className={`text-[10px] font-bold ${roi > 0 ? 'text-[#00ff41]' : roi < 0 ? 'text-[#ff3333]' : 'text-[#888]'}`}>
+                        {roi > 0 ? '+' : ''}{roi.toFixed(1)}% ROI
                       </span>
                     </div>
-
-                    {/* Expanded Detail */}
-                    {cityExpanded && (
-                      <CityDetail
-                        an={an || null}
-                        actual={actual}
-                        honda={hc}
-                      />
-                    )}
+                    <div className="grid grid-cols-2 gap-1 text-[8px] text-[#888] mb-1">
+                      <div>BAL: <span className="text-white">${port.balance.toFixed(0)}</span></div>
+                      <div>W/L: <span className="text-[#00ff41]">{port.wins}</span>-<span className="text-[#ff3333]">{port.losses}</span></div>
+                      <div>RISK: <span className="text-white">${port.deployed.toFixed(0)}</span> ({port.pending})</div>
+                      <div>WIN%: <span className="text-white">{port.winRate}%</span></div>
+                    </div>
                   </div>
                 );
               })}
             </div>
-          );
-        })}
+          </div>
+        </div>
+
+        {/* ── RIGHT MAIN: DAILY LOGS ── */}
+        <div className="flex-1 bg-black p-2 min-w-0">
+          <div className="mb-2 flex items-center gap-3">
+            <h2 className="text-[12px] font-bold text-white tracking-widest uppercase mb-0">DAILY SIGNALS & LOGS</h2>
+          </div>
+          
+          <div className="space-y-px">
+            {data.dates.map((dConfig: any) => {
+              const { date, cities } = dConfig;
+              const dateExpanded = expandedDates.has(date);
+              
+              return (
+                <div key={date} className="bg-[#050505] border border-[#111]">
+                  <div className="paper-date-row cursor-pointer" onClick={() => toggleDate(date)}>
+                    <span className="pc-chevron">{dateExpanded ? '▾' : '▸'}</span>
+                    <span className="pc-date-label text-white font-bold">{date}</span>
+                    <span className="pc-chips">
+                      <span className="pc-muted">{cities.length} markets</span>
+                    </span>
+                  </div>
+
+                  {dateExpanded && (
+                    <div className="p-1 pl-4 space-y-1 bg-[#030303]">
+                      {cities.map((cityData: any) => {
+                        const { city, isActive, final_temp, winning_bracket, trades, signals, hc } = cityData;
+                        const key = `${date}|${city}`;
+                        const cityExpanded = expandedCities.has(key);
+
+                        // Find any won trades to highlight background
+                        const hasWin = trades.some((t:any) => t.status === 'WON');
+                        const hasLoss = trades.some((t:any) => t.status === 'LOST');
+
+                        return (
+                          <div key={city} className={`border ${hasWin ? 'border-[#00ff41]/20 bg-[#00ff41]/5' : hasLoss ? 'border-[#ff3333]/10 bg-[#ff3333]/5' : 'border-[#1a1a1a] bg-[#0a0a0a]'}`}>
+                            <div className="flex items-center px-2 py-1.5 cursor-pointer hover:bg-[#1a1a1a] transition-colors" onClick={() => toggleCity(key)}>
+                              <span className="text-[8px] text-[#555] w-4">{cityExpanded ? '▾' : '▸'}</span>
+                              <span className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-[#888]'}`}>{city.toUpperCase().replace('-', ' ')}</span>
+                              
+                              <div className="ml-auto flex items-center gap-2 text-[8px] font-mono">
+                                {winning_bracket && (
+                                  <span className="bg-[#bb86fc]/20 text-[#bb86fc] px-1.5 py-0.5 rounded-xs font-bold border border-[#bb86fc]/30 flex items-center gap-1">
+                                    <span className="text-[6px] uppercase tracking-widest text-[#bb86fc]/70">WINNER</span>
+                                    {winning_bracket}
+                                  </span>
+                                )}
+                                {final_temp != null ? (
+                                  <span className="bg-white text-black px-1.5 py-0.5 rounded-xs font-bold shadow-[0_0_8px_rgba(255,255,255,0.3)]">
+                                    {Math.round(final_temp)}°C
+                                  </span>
+                                ) : (
+                                  <span className="text-[#555]">PENDING</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* City Detail Drawer */}
+                            {cityExpanded && (
+                              <div className="p-2 pt-0 border-t border-[#111] grid grid-cols-1 xl:grid-cols-2 gap-2 mt-1">
+                                
+                                {/* Autonomous AI Strategies */}
+                                <div>
+                                  <div className="text-[7px] font-bold text-[#888] mb-1.5 tracking-widest pb-1 border-b border-[#222]">AUTONOMOUS PICKS</div>
+                                  <div className="space-y-1">
+                                    {['ENS', 'BMA', 'ENS_PHD', 'BMA_PHD'].map(m => {
+                                      const sig = signals.find((s:any) => s.model_column === m);
+                                      const trade = trades.find((t:any) => t.model_column === m);
+                                      
+                                      if (!sig && !trade) return null;
+                                      
+                                      // Render the outcome
+                                      const bracket = trade?.bracket || sig?.pick_bracket;
+                                      let statusBadge = null;
+                                      if (trade) {
+                                        if (trade.status === 'WON') statusBadge = <span className="text-[#00ff41] font-bold">WON +${trade.pnl.toFixed(0)}</span>;
+                                        else if (trade.status === 'LOST') statusBadge = <span className="text-[#ff3333] font-bold">LOST -${trade.cost.toFixed(0)}</span>;
+                                        else statusBadge = <span className="text-[#ff8c00]">BOUGHT @ {Math.round(trade.entry_price * 100)}¢ (IN PLAY)</span>;
+                                      } else if (sig) {
+                                        statusBadge = <span className="text-[#555]">NO ENTRY ({Math.round(sig.pick_price * 100)}¢)</span>;
+                                      }
+
+                                      let confidenceBadge = null;
+                                      if (winning_bracket && sig?.probabilities_json) {
+                                        const winnerProb = sig.probabilities_json.find((b:any) => (b.name || b.title) === winning_bracket)?.forecastProb;
+                                        if (winnerProb != null) {
+                                          confidenceBadge = <span className="text-[#bb86fc] bg-[#bb86fc]/10 px-1 py-0.5 rounded-sm ml-2">🎯 {Math.round(winnerProb * 100)}% prob</span>;
+                                        }
+                                      }
+
+                                      return (
+                                        <div key={m} className={`flex items-center justify-between text-[8px] font-mono px-1.5 py-1 ${trade ? 'bg-[#141414]' : 'bg-[#0a0a0a]'}`}>
+                                          <div className="flex items-center gap-2">
+                                            <span className="w-12 text-[#00bcd4] uppercase font-bold">{m.replace('_', '+')}</span>
+                                            <span className="text-[#eee]">{bracket}</span>
+                                          </div>
+                                          <div className="flex items-center">
+                                            {statusBadge}
+                                            {confidenceBadge}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                    {signals.length === 0 && trades.length === 0 && (
+                                       <div className="text-[8px] text-[#444] font-mono py-1 italic">No signals recorded...</div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Honda Civic */}
+                                <div>
+                                  <div className="text-[7px] font-bold text-[#888] mb-1.5 tracking-widest pb-1 border-b border-[#222]">HONDA CIVIC (BENCHMARK)</div>
+                                  {hc ? (
+                                    <div className="space-y-1 text-[8px] font-mono">
+                                      {hc.yesPositions?.map((p: any, i: number) => (
+                                        <div key={`hcy-${i}`} className="flex justify-between items-center bg-[#141414] px-1.5 py-1">
+                                          <div>
+                                            <span className="text-[#00bcd4] mr-2">YES</span>
+                                            <span className="text-[#eee]">{p.label}</span>
+                                          </div>
+                                          <div>
+                                            <span className="text-[#888]">${p.netCost.toFixed(0)}</span>
+                                            {p.redeemed > 0 && <span className="text-[#00ff41] ml-2">+${p.redeemed.toFixed(0)}</span>}
+                                          </div>
+                                        </div>
+                                      ))}
+                                      {hc.noPositions?.map((p: any, i: number) => (
+                                        <div key={`hcn-${i}`} className="flex justify-between items-center bg-[#0a0a0a] px-1.5 py-1">
+                                          <div>
+                                            <span className="text-[#ff3333] mr-2">NO</span>
+                                            <span className="text-[#555]">{p.label}</span>
+                                          </div>
+                                          <div className="text-[#555]">${p.netCost.toFixed(0)}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-[8px] text-[#444] font-mono py-1 italic">No HC trades discovered...</div>
+                                  )}
+                                </div>
+
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+        </div>
       </div>
     </main>
   );
-}
-
-function DashStat({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="flex items-center gap-1">
-      <span className="text-[8px] uppercase tracking-widest" style={{ color: color || '#555' }}>{label}</span>
-      <span className="text-[11px] font-bold text-white" style={color && color !== '#555' ? { color } : undefined}>{value}</span>
-    </div>
-  );
-}
-
-function CityDetail({ an, actual, honda }: {
-  an: PaperAnalysisCity | null;
-  actual: { temp: number | null; source: string } | undefined;
-  honda: HCCityData | null;
-}) {
-  return (
-    <div className="paper-detail">
-      {/* Actual Temperature */}
-      <div className="pd-section-title" style={{ color: '#fff' }}>ACTUAL TEMPERATURE (WUNDERGROUND)</div>
-      <div className="pd-actual-row">
-        {actual?.temp != null ? (
-          <>
-            <span className="pd-actual-temp">{Math.round(actual.temp)}°C</span>
-            <span className="pc-muted">({actual.source})</span>
-          </>
-        ) : actual?.source === 'future' ? (
-          <span className="pc-muted">Not yet available (future date)</span>
-        ) : (
-          <span className="pc-muted">Loading...</span>
-        )}
-      </div>
-
-      {/* Bracket Probabilities Table */}
-      {an?.allBrackets && an.allBrackets.length > 0 && (
-        <>
-          <div className="pd-section-title" style={{ marginTop: '6px' }}>BRACKET PROBABILITIES</div>
-          <div className="pd-bracket-header">
-            <span className="pd-bname">Bracket</span>
-            <span className="pc-muted">Market</span>
-            <span className="pc-ens">Ensemble</span>
-            <span className="pc-fcst">Blended</span>
-            <span className="pc-muted">Edge</span>
-          </div>
-          {an.allBrackets.map((b: PaperBracket) => {
-            const isEnsPick = b.name === an.ens?.yesBracket;
-            const isFcstPick = b.name === an.fcst?.yesBracket;
-            const mkt = parseFloat(b.mkt as any) || 0;
-            const fcst = parseFloat(b.fcst as any) || 0;
-            const edge = fcst - mkt;
-            // Check if actual temp resolves to this bracket
-            const isWinner = actual?.temp != null && bracketContainsTemp(b.name, actual.temp);
-
-            return (
-              <div key={b.name} className={`pd-bracket-row ${isWinner ? 'pd-bracket-winner' : ''}`}>
-                <span className="pd-bname">
-                  {isEnsPick && isFcstPick ? <span className="pc-green">★</span>
-                    : isEnsPick ? <span className="pc-ens">◆</span>
-                    : isFcstPick ? <span className="pc-fcst">◆</span>
-                    : <span style={{ width: '8px', display: 'inline-block' }}> </span>}
-                  {' '}{b.name}
-                  {isWinner && <span className="pc-green"> ✓</span>}
-                </span>
-                <span className="pc-muted">{b.mkt}%</span>
-                <span className="pc-ens">{b.ens}%</span>
-                <span className="pc-fcst">{b.fcst}%</span>
-                <span className={edge >= 5 ? 'pc-green' : edge <= -5 ? 'pc-red' : 'pc-muted'}>
-                  {edge >= 0 ? '+' : ''}{edge.toFixed(1)}%
-                </span>
-              </div>
-            );
-          })}
-          <div style={{ paddingTop: '3px', fontSize: '7px', color: '#444' }}>
-            ◆ = YES pick &nbsp; ★ = both agree &nbsp; ✓ = actual winner
-          </div>
-        </>
-      )}
-
-      {/* Honda Civic Investments */}
-      {honda && (
-        <>
-          <div className="pd-section-title" style={{ color: '#00e676', marginTop: '6px' }}>HONDA CIVIC INVESTMENTS</div>
-          <div className="pd-bracket-header">
-            <span className="pd-bname">Side</span>
-            <span className="pc-white">Bracket</span>
-            <span className="pc-muted">Cost</span>
-            <span className="pc-muted">Shares</span>
-            <span className="pc-muted">Redeemed</span>
-          </div>
-          {honda.yesPositions?.map((p: any, i: number) => (
-            <div key={`hc-yes-${i}`} className="pd-hc-row">
-              <span className="paper-side-badge paper-side-yes">YES</span>
-              <span className="pc-white">{p.label}</span>
-              <span className="pc-muted">${p.netCost.toFixed(2)}</span>
-              <span className="pc-muted">{p.netShares.toFixed(1)}</span>
-              <span className={p.redeemed > 0 ? 'pc-green' : 'pc-muted'}>${p.redeemed.toFixed(2)}</span>
-            </div>
-          ))}
-          {honda.noPositions?.map((p: any, i: number) => (
-            <div key={`hc-no-${i}`} className="pd-hc-row">
-              <span className="paper-side-badge paper-side-no">NO</span>
-              <span className="pc-white">{p.label}</span>
-              <span className="pc-muted">${p.netCost.toFixed(2)}</span>
-              <span className="pc-muted">{p.netShares.toFixed(1)}</span>
-              <span className={p.redeemed > 0 ? 'pc-green' : 'pc-muted'}>${p.redeemed.toFixed(2)}</span>
-            </div>
-          ))}
-          <div className="pd-hc-summary">
-            <span className="pc-muted">Total Cost:</span>
-            <span className="pc-white">${honda.totalCost?.toFixed(2) || '0'}</span>
-            <span className="pc-sep">·</span>
-            <span className="pc-muted">Redeemed:</span>
-            <span className="pc-green">${honda.totalRedeemed?.toFixed(2) || '0'}</span>
-            <span className="pc-sep">·</span>
-            <span className="pc-muted">PnL:</span>
-            <span className={(honda.estimatedPnl || 0) >= 0 ? 'pc-green' : 'pc-red'}>
-              {(honda.estimatedPnl || 0) >= 0 ? '+' : ''}${honda.estimatedPnl?.toFixed(2) || '0'}
-            </span>
-            <span className="pc-sep">·</span>
-            <span className="pc-muted">{honda.tradeCount || 0} trades</span>
-          </div>
-        </>
-      )}
-
-      {/* No data */}
-      {!an && !honda && (
-        <div style={{ padding: '4px 0', color: '#333', fontSize: '8px' }}>
-          No market data or Honda Civic investments for this city/date
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Check if an actual temperature falls within a bracket name like "14°C", "9°C or below",
- * "19°C or higher", "84-85°F", etc.
- */
-function bracketContainsTemp(bracketName: string, tempC: number): boolean {
-  if (!bracketName) return false;
-  const name = bracketName.trim();
-
-  // Detect unit
-  const isFahrenheit = name.includes('°F');
-  // Convert actual temp to bracket unit
-  const actual = isFahrenheit ? tempC * 9 / 5 + 32 : tempC;
-  const rounded = Math.round(actual);
-
-  // "X°C or below" / "X°F or below"
-  const belowMatch = name.match(/(\d+)°[CF]\s+or\s+below/i);
-  if (belowMatch) return rounded <= parseInt(belowMatch[1]);
-
-  // "X°C or higher" / "X°F or higher"
-  const aboveMatch = name.match(/(\d+)°[CF]\s+or\s+higher/i);
-  if (aboveMatch) return rounded >= parseInt(aboveMatch[1]);
-
-  // "X-Y°C" / "X-Y°F" range
-  const rangeMatch = name.match(/(-?\d+)-(-?\d+)°[CF]/i);
-  if (rangeMatch) {
-    const lo = parseInt(rangeMatch[1]);
-    const hi = parseInt(rangeMatch[2]);
-    return rounded >= lo && rounded <= hi;
-  }
-
-  // Exact: "X°C" / "X°F"
-  const exactMatch = name.match(/(-?\d+)°[CF]/i);
-  if (exactMatch) return rounded === parseInt(exactMatch[1]);
-
-  return false;
 }

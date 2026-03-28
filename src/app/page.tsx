@@ -97,6 +97,12 @@ export default function HomePage() {
           const msg: WsMessage = JSON.parse(event.data);
           if (msg.type === 'price_update') {
             handlePriceUpdate(msg as any);
+          } else if (msg.type === 'price_snapshot' && (msg as any).prices) {
+            // Apply all cached prices on connect/reconnect
+            const prices = (msg as any).prices as Record<string, { price: number; name: string }>;
+            for (const [tokenId, { price, name }] of Object.entries(prices)) {
+              handlePriceUpdate({ tokenId, name, price, change: 0 });
+            }
           }
         } catch {}
       };
@@ -170,11 +176,14 @@ export default function HomePage() {
   }, []);
 
   // ── Analyze City ──
-  const analyzeCity = useCallback(async (slug: string, dateStr: string) => {
-    setCurrentAnalysis({ slug, date: dateStr });
-    setAnalysisLoading(true);
-    setShowRightPanel(true);
-    setAnalysisData(null);
+  const analyzeCity = useCallback(async (slug: string, dateStr: string, fresh = false) => {
+    // Only show loading state on initial load, not silent refreshes
+    if (!fresh) {
+      setCurrentAnalysis({ slug, date: dateStr });
+      setAnalysisLoading(true);
+      setShowRightPanel(true);
+      setAnalysisData(null);
+    }
 
     const city = multiDayData?.cities?.find((c) => c.slug === slug);
     const cityName = (city?.name || slug).toUpperCase();
@@ -183,10 +192,11 @@ export default function HomePage() {
     setInstName(`${cityName} // ${dateLabel} // TEMP`);
 
     // Close mobile sidebar
-    if (window.innerWidth < 768) setSidebarOpen(false);
+    if (!fresh && window.innerWidth < 768) setSidebarOpen(false);
 
     try {
-      const res = await fetch(`/api/analyze/${slug}/${dateStr}`);
+      const freshParam = fresh ? '?fresh=1' : '';
+      const res = await fetch(`/api/analyze/${slug}/${dateStr}${freshParam}`);
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || String(res.status)); }
       const data: AnalysisData = await res.json();
       setAnalysisData(data);
@@ -201,9 +211,9 @@ export default function HomePage() {
         }
       }
     } catch (err: any) {
-      setAnalysisData({ error: err.message } as AnalysisData);
+      if (!fresh) setAnalysisData({ error: err.message } as AnalysisData);
     } finally {
-      setAnalysisLoading(false);
+      if (!fresh) setAnalysisLoading(false);
     }
   }, [multiDayData]);
 
@@ -211,18 +221,18 @@ export default function HomePage() {
   const handleRefresh = useCallback(() => {
     loadMultiDay();
     if (currentAnalysis) {
-      analyzeCity(currentAnalysis.slug, currentAnalysis.date);
+      analyzeCity(currentAnalysis.slug, currentAnalysis.date, true);
     }
   }, [loadMultiDay, currentAnalysis, analyzeCity]);
 
   // ── Initial Load ──
   useEffect(() => { loadMultiDay(); }, [loadMultiDay]);
 
-  // ── Auto-refresh analysis every 2 min ──
+  // ── Auto-refresh analysis every 90s (fresh=true bypasses server cache) ──
   useEffect(() => {
     const id = setInterval(() => {
-      if (currentAnalysis) analyzeCity(currentAnalysis.slug, currentAnalysis.date);
-    }, 120000);
+      if (currentAnalysis) analyzeCity(currentAnalysis.slug, currentAnalysis.date, true);
+    }, 90000);
     return () => clearInterval(id);
   }, [currentAnalysis, analyzeCity]);
 

@@ -49,6 +49,19 @@ export interface BracketProbability {
   forecastProb: number | null;
   marketPrice?: number;
   edge?: number;
+  metarEliminated?: boolean;
+  factorAdjusted?: boolean;
+  climProb?: number;
+  threshold?: Threshold;
+}
+
+export interface BmaBlend {
+  ensWeight: number;
+  detWeight: number;
+  ensFraction: string;
+  detFraction: string;
+  detModels: number;
+  daysOut: number;
 }
 
 export interface Edge {
@@ -57,6 +70,13 @@ export interface Edge {
   reasoning?: string;
   modelDivergence?: ModelDivergence;
   signal?: string;
+  marketProbability?: number | null;
+  forecastProbability?: number | null;
+  edgePercent?: string | null;
+  adjustedEdge?: string | null;
+  confidence?: string | null;
+  bestBracket?: string;
+  bestBracketTitle?: string;
 }
 
 export interface ModelDivergence {
@@ -69,9 +89,11 @@ export interface ModelDivergence {
 }
 
 export interface Atmospheric {
+  temperature?: number;
   humidity?: number;
   dewPoint?: number;
   windSpeed?: number;
+  windSpeed80m?: number;
   windGusts?: number;
   windDirection?: number;
   pressure?: number;
@@ -128,11 +150,15 @@ export interface EnsembleData {
   timeSteps?: EnsembleTimeStep[];
   memberCount?: number;
   averageSpread?: number;
+  probability?: number | null;
   bracketProbabilities?: BracketProbability[];
   rawBracketProbabilities?: BracketProbability[];
   preFactorBracketProbabilities?: BracketProbability[];
+  ensShiftedBrackets?: BracketProbability[];
+  preMetarBracketProbabilities?: BracketProbability[];
+  preMetarEnsShiftedBrackets?: BracketProbability[];
   memberMaxes?: number[];
-  bmaBlend?: any;
+  bmaBlend?: BmaBlend;
 }
 
 export interface EnsembleTimeStep {
@@ -244,8 +270,13 @@ export interface FactorBreakdown {
   netAdjustment: number;
   netConfidence: number;
   effectiveShift: number;
-  shiftFraction: number;
+  blendAlpha?: number;
+  avgConfidence?: number;
+  method?: 'RE_KDE_BMA_BLEND' | 'REDISTRIBUTION_FALLBACK';
+  shiftFraction?: number;
   shiftDirection: 'WARMING' | 'COOLING';
+  memberCount?: number;
+  detModelCount?: number;
   activeFactors: { factor: string; adjustment: number; confidence: number; reasoning: string }[];
   perBracket: FactorBracketShift[];
 }
@@ -268,11 +299,27 @@ export interface AnalysisData {
   spreadScore?: SpreadScore;
   stationBias?: StationBias;
   trajectory?: TrajectoryPoint[];
+  hourlyCurve?: any[];
   liveWeather?: LiveWeather;
   advancedFactors?: AdvancedFactors;
   factorAdjustment?: FactorBreakdown;
+  perModelBrackets?: PerModelBracket[];
   strategy?: Strategy;
   error?: string;
+}
+
+export interface PerModelBracketProb {
+  name: string;
+  prob: number | null;
+}
+
+export interface PerModelBracket {
+  model: string;
+  weight: number;
+  maxTemp: number | null;
+  isEnsemble?: boolean;
+  memberCount?: number;
+  brackets: PerModelBracketProb[];
 }
 
 // ── WebSocket Types ───────────────────────────────────────────

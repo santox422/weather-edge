@@ -42,8 +42,8 @@ export default function StrategyPanel({ data }: StrategyPanelProps) {
   const totalDeployed = strat.summary.totalDeployed || 1;
 
   return (
-    <div className="bg-[#050505]" id="panel-strategy">
-      <div className="section-header px-2 py-1.5 text-[9px] font-bold text-[#ff8c00] uppercase tracking-[0.15em] bg-[#0a0a0a] border-b border-[#1a1a1a] border-l-2 border-l-[#ff8c00] flex items-center gap-1.5"
+    <div className="analysis-card" id="panel-strategy">
+      <div className="section-header"
         data-tip="Kelly Criterion position sizing">
         TRADING STRATEGY <span className="text-[7px] border border-[#ff8c00]/40 px-1.5 py-[1px] text-[#ff8c00] bg-[#ff8c00]/5 tracking-wider">KELLY</span>
       </div>

@@ -12,7 +12,8 @@ import { WebSocketServer } from 'ws';
 import { PriceFeed } from './src/lib/services/ws-price-feed.js';
 // @ts-ignore — JS module
 import { startBinanceWS } from './src/lib/services/crypto-ws.js';
-
+// @ts-ignore
+import { runPaperTradingLoop } from './src/lib/services/paper-trade-engine.js';
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
 const port = parseInt(process.env.PORT || '3001', 10);
@@ -84,5 +85,10 @@ app.prepare().then(() => {
     console.log(`\n[Weather Edge] http://localhost:${port}`);
     console.log(`[WebSocket] ws://${hostname}:${port}/ws`);
     console.log(`[Mode] ${dev ? 'development' : 'production'}\n`);
+    
+    // Start autonomous paper trading engine (run once immediately, then every 15 mins)
+    console.log('[PAPER-ENGINE] Initializing...');
+    setTimeout(() => runPaperTradingLoop().catch(console.error), 5000);
+    setInterval(() => runPaperTradingLoop().catch(console.error), 15 * 60 * 1000);
   });
 });

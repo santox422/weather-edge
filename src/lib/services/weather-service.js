@@ -103,7 +103,7 @@ export async function getForecast(lat, lon, days = 7) {
  * Cached to disk with 3-hour TTL.
  */
 export async function getMultiModelForecast(lat, lon, days = 7, models = null) {
-  const MULTI_TTL = 3 * 60 * 60 * 1000; // 3 hours
+  const MULTI_TTL = 1 * 60 * 60 * 1000; // 1 hour — models update ~4x/day but shorter TTL keeps data fresh near resolution
   const modelList = models || [
     'gfs_seamless',
     'ecmwf_ifs025',
@@ -140,6 +140,8 @@ export async function getMultiModelForecast(lat, lon, days = 7, models = null) {
       const raw = await res.json();
       // Open-Meteo returns per-model columns like temperature_2m_gfs_seamless, etc.
       // Parse into per-model data objects
+      const found = [];
+      const missing = [];
       const data = modelList.map(model => {
         const dailyMaxKey = `temperature_2m_max_${model}`;
         const dailyMinKey = `temperature_2m_min_${model}`;
@@ -149,7 +151,11 @@ export async function getMultiModelForecast(lat, lon, days = 7, models = null) {
         // Check if this model has data in the response
         const hasDaily = raw.daily && raw.daily[dailyMaxKey];
         const hasHourly = raw.hourly && raw.hourly[hourlyTempKey];
-        if (!hasDaily && !hasHourly) return null; // Model not available for this location
+        if (!hasDaily && !hasHourly) {
+          missing.push(model);
+          return null; // Model not available for this location
+        }
+        found.push(model);
         return {
           model,
           data: {
@@ -169,10 +175,18 @@ export async function getMultiModelForecast(lat, lon, days = 7, models = null) {
         };
       }).filter(Boolean);
 
-      if (data.length > 0) {
+      if (missing.length > 0) {
+        console.log(`[WARN] Batched multi-model: missing ${missing.length} models: ${missing.join(', ')}`);
+      }
+
+      // Only use batched result if we got at least half the requested models
+      // Otherwise fall through to individual requests
+      if (data.length > 0 && data.length >= modelList.length / 2) {
         writeDiskCache(cacheFile, { _cachedAt: Date.now(), data });
-        console.log(`[CACHE] Multi-model saved for ${lat},${lon} (${data.length} models, batched)`);
+        console.log(`[CACHE] Multi-model saved for ${lat},${lon} (${data.length}/${modelList.length} models, batched)`);
         return data;
+      } else if (data.length > 0) {
+        console.log(`[WARN] Batched only returned ${data.length}/${modelList.length} models — falling back to individual requests`);
       }
     }
   } catch (err) {
@@ -283,6 +297,7 @@ async function getUnifiedForecast(lat, lon, days = 3) {
       'wind_speed_10m', 'wind_speed_80m', 'wind_speed_120m',
       'wind_gusts_10m', 'wind_direction_10m',
       'precipitation_probability', 'precipitation', 'weather_code',
+      'boundary_layer_height',
       // Solar radiation
       'shortwave_radiation', 'direct_radiation', 'diffuse_radiation',
       'direct_normal_irradiance', 'shortwave_radiation_instant',
@@ -570,23 +585,109 @@ export async function getForecastTrajectory(lat, lon, targetDate, daysBack = 5) 
 }
 
 /**
- * Compute per-city station bias by comparing historical forecasts to ERA5 reanalysis.
- * Returns the mean bias (forecast - observation) in °C over the past 90 days.
- * Positive bias = model runs warm, negative = model runs cold.
- * Cached permanently to disk.
+ * Fetch historical hourly observations from the Weather Company API
+ * (the data source powering Wunderground, which Polymarket uses for resolution).
+ * Returns daily max temperatures in whole-degree integers — exactly what
+ * the market resolves against.
  *
- * NOTE: The "observation" baseline is ERA5 reanalysis, NOT Weather Underground.
- * Polymarket markets resolve against Wunderground station readings, so there may
- * be residual bias from this mismatch (ERA5 grid cell vs point station measurement).
- * A future improvement could scrape Wunderground historical data for each city's
- * specific station (e.g., wunderground.com/history/daily/gb/london/EGLC) and use
- * those as the observation baseline instead.
+ * @param {string} icao — ICAO station code (e.g. 'EGLC')
+ * @param {number} days — number of days to fetch
+ * @returns {{ dates: string[], maxTemps: number[] }} daily maxima from WU station
  */
-export async function getStationBias(lat, lon, days = 90) {
-  const cacheFile = diskCacheKey('bias', lat, lon, days);
+export async function getWundergroundHistory(icao, days = 90) {
+  if (!icao) return null;
+
+  const WU_TTL = 24 * 60 * 60 * 1000; // 24h cache
+  const cacheFile = diskCacheKey('wu_hist', icao, days);
+  const cached = readDiskCache(cacheFile);
+  if (cached && cached._cachedAt && Date.now() - cached._cachedAt < WU_TTL) {
+    console.log(`[CACHE] WU history hit for ${icao} (${cached.data?.dates?.length || 0} days)`);
+    return cached.data;
+  }
+
+  // Weather Company API — same backend as Wunderground.
+  // Public API key embedded in WU frontend (no auth needed).
+  const WU_API = 'https://api.weather.com/v1/location';
+  const WU_KEY = 'e1f10a1e78da46f5b10a1e78da96f525';
+
+  // Determine the country code suffix for the WU API location ID
+  const countryMap = {
+    'K': 'US', 'C': 'CA', 'EG': 'GB', 'LF': 'FR', 'ED': 'DE',
+    'LI': 'IT', 'LT': 'TR', 'RK': 'KR', 'RJ': 'JP', 'NZ': 'NZ',
+    'SA': 'AR', 'SB': 'BR', 'VH': 'HK', 'YS': 'AU',
+  };
+  const prefix1 = icao.substring(0, 1);
+  const prefix2 = icao.substring(0, 2);
+  const country = countryMap[prefix1] || countryMap[prefix2] || 'US';
+  const locationId = `${icao}:9:${country}`;
+
+  const dailyMaxes = {}; // date string -> max integer temp
+
+  try {
+    // Fetch in 30-day chunks (API limit)
+    const chunkSize = 30;
+    for (let offset = 0; offset < days; offset += chunkSize) {
+      const chunkEnd = new Date();
+      chunkEnd.setDate(chunkEnd.getDate() - offset - 1);
+      const chunkStart = new Date(chunkEnd);
+      chunkStart.setDate(chunkStart.getDate() - Math.min(chunkSize, days - offset) + 1);
+
+      const startStr = chunkStart.toISOString().split('T')[0].replace(/-/g, '');
+      const endStr = chunkEnd.toISOString().split('T')[0].replace(/-/g, '');
+
+      const url = `${WU_API}/${locationId}/observations/historical.json?apiKey=${WU_KEY}&units=m&startDate=${startStr}&endDate=${endStr}`;
+      const res = await throttledFetch(url);
+      if (!res.ok) {
+        console.log(`[WU] API error for ${icao} chunk ${startStr}-${endStr}: ${res.status}`);
+        continue;
+      }
+
+      const data = await res.json();
+      const observations = data.observations || [];
+
+      for (const obs of observations) {
+        if (obs.temp == null || !obs.valid_time_gmt) continue;
+        // Convert Unix timestamp to date string
+        const dateStr = new Date(obs.valid_time_gmt * 1000).toISOString().split('T')[0];
+        // Track max integer temperature per day (WU reports integer temps)
+        if (!dailyMaxes[dateStr] || obs.temp > dailyMaxes[dateStr]) {
+          dailyMaxes[dateStr] = obs.temp;
+        }
+      }
+    }
+
+    const dates = Object.keys(dailyMaxes).sort();
+    const maxTemps = dates.map(d => dailyMaxes[d]);
+
+    if (dates.length === 0) return null;
+
+    const result = { dates, maxTemps };
+    writeDiskCache(cacheFile, { _cachedAt: Date.now(), data: result });
+    console.log(`[WU] Historical data saved for ${icao}: ${dates.length} days`);
+    return result;
+  } catch (err) {
+    console.log(`[WARN] WU historical fetch failed for ${icao}: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Compute per-city station bias by comparing historical forecasts to actual
+ * observations. Uses the Weather Company API (Wunderground's data source) as
+ * primary truth — this is the EXACT same data Polymarket resolves against.
+ * Falls back to ERA5 reanalysis if WU API is unavailable.
+ *
+ * Returns overall bias + seasonal (monthly) breakdown for regime-dependent
+ * correction. Positive bias = model runs warm, negative = model runs cold.
+ * Cached with 7-day TTL.
+ *
+ * @param {string} icao — ICAO station code for WU truth data
+ */
+export async function getStationBias(lat, lon, days = 90, icao = null) {
+  const cacheFile = diskCacheKey('bias_v2', lat, lon, days, icao || 'noicao');
   const cached = readDiskCache(cacheFile);
   if (cached && cached.computedAt && Date.now() - cached.computedAt < 7 * 24 * 60 * 60 * 1000) {
-    console.log(`[CACHE] Station bias hit for ${lat},${lon}`);
+    console.log(`[CACHE] Station bias hit for ${lat},${lon} (${cached.truthSource || 'era5'})`);
     return cached;
   }
 
@@ -611,55 +712,101 @@ export async function getStationBias(lat, lon, days = 90) {
     if (!fcstRes.ok) throw new Error(`Historical Forecast API: ${fcstRes.status}`);
     const fcstData = await fcstRes.json();
 
-    // 2. Get actual observations (ERA5 reanalysis)
-    const obsParams = new URLSearchParams({
-      latitude: lat, longitude: lon,
-      daily: 'temperature_2m_max',
-      temperature_unit: 'celsius',
-      start_date: startStr, end_date: endStr,
-    });
-    const obsRes = await throttledFetch(`${BASE_HISTORICAL}?${obsParams}`);
-    if (!obsRes.ok) throw new Error(`Historical API: ${obsRes.status}`);
-    const obsData = await obsRes.json();
+    // 2. Get actual observations — prefer Wunderground (exact market resolution source)
+    let obsDates = [];
+    let obsMaxes = [];
+    let truthSource = 'era5';
 
-    // 3. Compute bias
-    const fcstMaxes = fcstData.daily?.temperature_2m_max || [];
-    const obsMaxes = obsData.daily?.temperature_2m_max || [];
-    const fcstDates = fcstData.daily?.time || [];
-    const obsDates = obsData.daily?.time || [];
-
-    const biases = [];
-    for (let i = 0; i < fcstDates.length; i++) {
-      const obsIdx = obsDates.indexOf(fcstDates[i]);
-      if (obsIdx !== -1 && fcstMaxes[i] != null && obsMaxes[obsIdx] != null) {
-        biases.push(fcstMaxes[i] - obsMaxes[obsIdx]);
+    if (icao) {
+      const wuData = await getWundergroundHistory(icao, days);
+      if (wuData && wuData.dates.length >= 20) {
+        obsDates = wuData.dates;
+        obsMaxes = wuData.maxTemps;
+        truthSource = 'wunderground';
+        console.log(`[BIAS] Using Wunderground station ${icao} as truth (${obsDates.length} days)`);
       }
     }
 
-    if (biases.length < 10) {
-      return { bias: 0, sampleSize: biases.length, reliable: false, computedAt: Date.now() };
+    // Fallback to ERA5 reanalysis if WU data insufficient
+    if (obsDates.length < 20) {
+      const obsParams = new URLSearchParams({
+        latitude: lat, longitude: lon,
+        daily: 'temperature_2m_max',
+        temperature_unit: 'celsius',
+        start_date: startStr, end_date: endStr,
+      });
+      const obsRes = await throttledFetch(`${BASE_HISTORICAL}?${obsParams}`);
+      if (!obsRes.ok) throw new Error(`Historical API: ${obsRes.status}`);
+      const obsData = await obsRes.json();
+      obsDates = obsData.daily?.time || [];
+      obsMaxes = obsData.daily?.temperature_2m_max || [];
+      truthSource = 'era5';
     }
 
-    const meanBias = biases.reduce((a, b) => a + b, 0) / biases.length;
-    const stdDev = Math.sqrt(biases.reduce((sum, b) => sum + (b - meanBias) ** 2, 0) / biases.length);
+    // 3. Compute bias — overall and by month
+    const fcstMaxArr = fcstData.daily?.temperature_2m_max || [];
+    const fcstDatesArr = fcstData.daily?.time || [];
+
+    const biases = [];       // { bias, month }
+    const monthlyBiases = {}; // month (1-12) -> [bias values]
+
+    for (let i = 0; i < fcstDatesArr.length; i++) {
+      const date = fcstDatesArr[i];
+      const obsIdx = obsDates.indexOf(date);
+      if (obsIdx === -1 || fcstMaxArr[i] == null || obsMaxes[obsIdx] == null) continue;
+
+      const bias = fcstMaxArr[i] - obsMaxes[obsIdx];
+      const month = new Date(date).getMonth() + 1; // 1-12
+      biases.push({ bias, month });
+
+      if (!monthlyBiases[month]) monthlyBiases[month] = [];
+      monthlyBiases[month].push(bias);
+    }
+
+    if (biases.length < 10) {
+      return { bias: 0, sampleSize: biases.length, reliable: false, computedAt: Date.now(), truthSource };
+    }
+
+    // Overall bias
+    const allBiasValues = biases.map(b => b.bias);
+    const meanBias = allBiasValues.reduce((a, b) => a + b, 0) / allBiasValues.length;
+    const stdDev = Math.sqrt(allBiasValues.reduce((sum, b) => sum + (b - meanBias) ** 2, 0) / allBiasValues.length);
+
+    // Monthly breakdown
+    const monthly = {};
+    for (const [m, vals] of Object.entries(monthlyBiases)) {
+      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+      monthly[m] = {
+        bias: +mean.toFixed(3),
+        sampleSize: vals.length,
+        direction: mean > 0.2 ? 'warm' : mean < -0.2 ? 'cold' : 'neutral',
+      };
+    }
+
+    // Bias discount: WU data = 100% (exact market source), ERA5 = 50% (grid mismatch)
+    const discount = truthSource === 'wunderground' ? 1.0 : 0.5;
 
     const result = {
       bias: meanBias,
+      biasDiscounted: meanBias * discount,
+      discount,
       stdDev,
       sampleSize: biases.length,
       reliable: biases.length >= 30,
       direction: meanBias > 0.2 ? 'warm' : meanBias < -0.2 ? 'cold' : 'neutral',
+      truthSource,
+      monthly,
       computedAt: Date.now(),
     };
 
     writeDiskCache(cacheFile, result);
-    console.log(`[BIAS] ${lat},${lon}: ${meanBias > 0 ? '+' : ''}${meanBias.toFixed(2)}°C (n=${biases.length})`);
+    console.log(`[BIAS] ${lat},${lon} (${truthSource}): ${meanBias > 0 ? '+' : ''}${meanBias.toFixed(2)}°C (discounted: ${(meanBias * discount).toFixed(2)}°C, n=${biases.length}, months: ${Object.keys(monthly).join(',')})`);
     return result;
   } catch (err) {
-      console.log(`[WARN] Station bias unavailable for ${lat},${lon}: ${err.message}`);
-      return { bias: 0, sampleSize: 0, reliable: false, computedAt: Date.now() };
-    }
+    console.log(`[WARN] Station bias unavailable for ${lat},${lon}: ${err.message}`);
+    return { bias: 0, sampleSize: 0, reliable: false, computedAt: Date.now(), truthSource: 'none' };
   }
+}
 
 /**
  * Get real-time METAR observation from the actual ICAO station that

@@ -329,6 +329,64 @@ export function computeDeterministicBracketProbs(predictions, outcomes, daysOut 
 }
 
 /**
+ * Compute bracket probabilities for each deterministic model INDIVIDUALLY.
+ * Returns per-model breakdown so the UI can show exactly which models
+ * favor which brackets, plus their weights.
+ *
+ * @param {Object[]} predictions — [{maxTemp, weight, model}, ...]
+ * @param {Object[]} outcomes — bracket outcomes with threshold info
+ * @param {number} daysOut — forecast lead time in days
+ * @param {number} biasCorrectionCelsius — station bias
+ * @param {string} marketUnit — 'C' or 'F'
+ * @returns {Object[]} [{ model, weight, maxTemp, brackets: [{ name, prob }] }]
+ */
+export function computePerModelBracketProbs(predictions, outcomes, daysOut = 1, biasCorrectionCelsius = 0, marketUnit = 'C') {
+  if (!predictions || predictions.length === 0 || !outcomes) return [];
+
+  const sigma = daysOut <= 1 ? 0.7 : daysOut <= 2 ? 1.0 : daysOut <= 4 ? 1.3 : 1.8;
+  const isFahrenheit = marketUnit === 'F';
+  const toC = (f) => (f - 32) * 5 / 9;
+
+  return predictions.filter(p => p.maxTemp != null).map(p => {
+    const mu = p.maxTemp - biasCorrectionCelsius;
+
+    const brackets = outcomes.map(outcome => {
+      const threshold = outcome.threshold;
+      if (!threshold) return { name: outcome.name, prob: null };
+
+      const val = isFahrenheit ? toC(threshold.value) : threshold.value;
+      const halfWidth = isFahrenheit ? 0.28 : 0.5;
+      let lo, hi;
+
+      if (threshold.type === 'range') {
+        const high = isFahrenheit ? toC(threshold.high) : threshold.high;
+        lo = val - halfWidth;
+        hi = high + halfWidth;
+      } else if (threshold.type === 'below') {
+        lo = val - 30;
+        hi = val + halfWidth;
+      } else if (threshold.type === 'above') {
+        lo = val - halfWidth;
+        hi = val + 30;
+      } else {
+        lo = val - halfWidth;
+        hi = val + halfWidth;
+      }
+
+      const prob = gaussianCDF((hi - mu) / sigma) - gaussianCDF((lo - mu) / sigma);
+      return { name: outcome.name, prob: Math.max(0, Math.min(1, prob)) };
+    });
+
+    return {
+      model: p.model,
+      weight: p.weight || 1,
+      maxTemp: p.maxTemp,
+      brackets,
+    };
+  });
+}
+
+/**
  * Standard normal CDF (Abramowitz & Stegun approximation, ≤ 7.5×10⁻⁸ error)
  */
 function gaussianCDF(x) {
@@ -419,29 +477,63 @@ export function applyMETARConstraint(bracketProbs, observedMaxC, marketUnit = 'C
   const toC = (f) => (f - 32) * 5 / 9;
   const isFahrenheit = marketUnit === 'F';
 
+  // Parse the temperature value from a bracket name like "9°C", "55°F", "3°C or below", "13°C or higher"
+  function parseBracketTemp(name) {
+    if (!name) return null;
+    const match = name.match(/(\d+)/);
+    if (!match) return null;
+    const val = parseInt(match[1], 10);
+    return isFahrenheit ? toC(val) : val;
+  }
+
+  function isBelowBracket(name) {
+    return /below|under|less/i.test(name || '');
+  }
+
+  function isAboveBracket(name) {
+    return /above|over|higher|more|greater/i.test(name || '');
+  }
+
   let changed = false;
   const adjusted = bracketProbs.map(b => {
-    if (b.forecastProb == null || !b.threshold) return b;
+    if (b.forecastProb == null) return b;
 
-    const threshold = b.threshold;
-    // Determine the bracket's upper bound in °C
-    let upperBoundC;
-    if (threshold.type === 'range') {
-      upperBoundC = isFahrenheit ? toC(threshold.high) : threshold.high;
-    } else if (threshold.type === 'below') {
-      upperBoundC = isFahrenheit ? toC(threshold.value) : threshold.value;
-    } else if (threshold.type === 'exact') {
-      upperBoundC = isFahrenheit ? toC(threshold.value) + 0.28 : threshold.value + 0.5;
+    // Use threshold if available, otherwise parse from name
+    let upperBoundC = null;
+
+    if (b.threshold) {
+      const threshold = b.threshold;
+      if (threshold.type === 'range') {
+        upperBoundC = isFahrenheit ? toC(threshold.high) : threshold.high;
+      } else if (threshold.type === 'below') {
+        upperBoundC = isFahrenheit ? toC(threshold.value) : threshold.value;
+      } else if (threshold.type === 'exact') {
+        upperBoundC = isFahrenheit ? toC(threshold.value) + 0.28 : threshold.value + 0.5;
+      } else {
+        return b; // 'above' brackets always reachable
+      }
     } else {
-      // 'above' brackets have no upper bound — they can always still be reached
-      return b;
+      // Parse from bracket name
+      const bracketName = b.name || b.title || '';
+      if (isAboveBracket(bracketName)) return b; // Always reachable
+      const tempC = parseBracketTemp(bracketName);
+      if (tempC == null) return b;
+
+      if (isBelowBracket(bracketName)) {
+        upperBoundC = tempC;
+      } else {
+        // Exact bracket: "9°C" means [8.5, 9.5)
+        upperBoundC = tempC + 0.5;
+      }
     }
+
+    if (upperBoundC == null) return b;
 
     // If observed max already exceeds this bracket's upper bound,
     // the outcome is impossible — the day's high is already past this bracket
-    if (observedMaxC > upperBoundC + 0.5) {
+    if (observedMaxC > upperBoundC) {
       changed = true;
-      return { ...b, forecastProb: 0, edge: -b.marketPrice, metarEliminated: true };
+      return { ...b, forecastProb: 0, edge: -(b.marketPrice || 0), metarEliminated: true };
     }
     return b;
   });
@@ -453,7 +545,7 @@ export function applyMETARConstraint(bracketProbs, observedMaxC, marketUnit = 'C
       for (const b of adjusted) {
         if (b.forecastProb > 0) {
           b.forecastProb = b.forecastProb / totalProb;
-          b.edge = b.forecastProb - b.marketPrice;
+          b.edge = b.forecastProb - (b.marketPrice || 0);
         }
       }
     }

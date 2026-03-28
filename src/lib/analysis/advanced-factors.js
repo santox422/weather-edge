@@ -210,17 +210,20 @@ export function analyzeSolarBudget(solarData, market) {
   const clearSkyBaseline = Math.max(200, 1000 * Math.max(0.2, solarAngleFactor));
   const radiationFraction = Math.min(1.0, avgShortwave / clearSkyBaseline);
 
-  // Temperature adjustment: each 10% reduction in radiation → ~0.5°C lower max
-  // This is derived from surface energy balance: ΔT ≈ ΔQ_s / (ρ * c_p * h)
+  // Temperature adjustment: model bias correction, NOT absolute physical cooling.
+  // NWP models explicitly simulate clouds and their radiative effects, meaning their 
+  // predicted max temps ALREADY include most of the cooling from this deficit.
+  // We only apply a correction for the known NWP bias: models often allow too much
+  // shortwave radiation to "leak" through low stratus clouds (under-representing optical depth).
   const radiationDeficit = 1.0 - radiationFraction;
-  const adjustment = -(radiationDeficit * 5.0); // Max -5°C for complete overcast
+  const adjustment = -(radiationDeficit * 0.8); // Max -0.8°C correction, aligned with MOS literature
 
   // Low clouds matter more than high clouds for radiation blocking
   const lowCloudWeight = avgCloudLow > 60 ? 0.85 : 1.0;
   const finalAdjustment = adjustment * lowCloudWeight;
 
   // Confidence based on clear-sky vs reality gap — larger gap = more certain adjustment
-  const confidence = Math.min(0.85, radiationDeficit * 1.2);
+  const confidence = Math.min(0.85, radiationDeficit * 0.8);
 
   return {
     factor: 'solar_budget',
@@ -388,7 +391,9 @@ export function analyzeDiurnalRange(hourlyCurve, market) {
     adjustment -= 0.3; // Models disagree significantly → reduce certainty
   }
 
-  const confidence = Math.min(0.7, peakIsNormal ? 0.6 : 0.4);
+  // Fix D: When adjustment is 0, this is diagnostic-only — set confidence to 0
+  // to avoid confusing the UI (showing 60% confidence next to no adjustment)
+  const confidence = Math.abs(adjustment) < 0.01 ? 0 : Math.min(0.7, peakIsNormal ? 0.6 : 0.4);
 
   // Build hourly curve string for reasoning
   const curveStr = [0, 3, 6, 9, 12, 15, 18, 21]
@@ -460,13 +465,13 @@ export function analyzePrecipTiming(hourlyCurve, atmospheric, market) {
   const avgMorningPrecipPerModel = hourlyCurve.length > 0 ? totalMorningPrecip / hourlyCurve.length : 0;
 
   if (avgPeakPrecipPerModel > 10) {
-    adjustment = -3.0;
+    adjustment = -1.5;
     confidence = 0.8;
   } else if (avgPeakPrecipPerModel > 2) {
-    adjustment = -1.5;
+    adjustment = -0.8;
     confidence = 0.7;
   } else if (avgPeakPrecipPerModel > 0.1) {
-    adjustment = -0.5;
+    adjustment = -0.3;
     confidence = 0.5;
   }
 
@@ -477,7 +482,7 @@ export function analyzePrecipTiming(hourlyCurve, atmospheric, market) {
   }
 
   // High precip probability from atmospheric data amplifies adjustment
-  if (precipProb > 70 && adjustment < -0.3) {
+  if (precipProb > 70 && adjustment <= -0.3) {
     confidence = Math.min(confidence + 0.15, 0.9);
   }
 
@@ -550,9 +555,10 @@ export function analyzeWindRegime(atmospheric, hourlyCurve, city, market) {
     const coastal = coastalMap[cityKey];
     const inRange = windDir >= coastal.onshoreRange[0] && windDir <= coastal.onshoreRange[1];
     if (inRange && windSpeed > 8) {
-      advectionEffect = -1.0; // Onshore flow → marine air suppresses heating
+      // Fix E: Scale onshore suppression with wind speed instead of flat -1.0
+      advectionEffect = -0.3 - Math.min(windSpeed - 8, 22) * 0.05; // -0.3 at 8mph → -1.4 at 30mph
     } else if (!inRange && windSpeed > 8) {
-      advectionEffect = 0.5; // Offshore flow → continental air enhances heating
+      advectionEffect = 0.2 + Math.min(windSpeed - 8, 22) * 0.025; // +0.2 at 8mph → +0.75 at 30mph
     }
   }
 
@@ -587,6 +593,7 @@ export function classifySynopticPattern(atmospheric, solarData, market) {
   const windSpeed = atmospheric.windSpeed;
   const windDir = atmospheric.windDirection;
   const dewPoint = atmospheric.dewPoint;
+  const blh = atmospheric.boundaryLayerHeight; // Boundary Layer Height in meters
 
   let pattern = 'UNKNOWN';
   let tempBehavior = '';
@@ -594,7 +601,12 @@ export function classifySynopticPattern(atmospheric, solarData, market) {
   let confidence = 0.3;
 
   // Classification priority: most specific patterns first
-  if (precipProb > 50 && cloudCover > 50) {
+  // FRONTAL_PASSAGE requires genuinely frontal conditions — high precip+cloud
+  // is necessary but NOT sufficient. Anticyclonic regimes (P > 1020, RH < 55%)
+  // can have residual cloud cover and elevated precip probability from convective
+  // cells without an actual front. Require either low pressure OR high humidity
+  // as corroborating frontal evidence.
+  if (precipProb > 50 && cloudCover > 50 && (pressure < 1020 || humidity > 55)) {
     pattern = 'FRONTAL_PASSAGE';
     tempBehavior = 'Temperature depends on front timing. Pre-frontal warmth vs post-frontal cooling.';
     adjustment = -0.5;
@@ -602,7 +614,13 @@ export function classifySynopticPattern(atmospheric, solarData, market) {
   } else if (pressure > 1018 && cloudCover < 40 && precipProb < 25) {
     pattern = 'HIGH_PRESSURE_CLEAR';
     tempBehavior = 'Max follows radiation curve — standard model prediction reliable';
-    confidence = 0.6;
+    // Shallow BLH + clear sky = strong surface heating (heat trapped near surface)
+    if (blh != null && blh < 500) {
+      adjustment = 0.3;
+      confidence = 0.5;
+      tempBehavior += '. Shallow BLH concentrates heating at surface — models may underpredict peak.';
+    }
+    // Fix D: When adjustment is 0 for HIGH_PRESSURE_CLEAR, confidence = 0 (diagnostic only)
   } else if (pressure > 1012 && humidity < 45 && cloudCover < 50 && precipProb < 20) {
     pattern = 'CONTINENTAL_WARM';
     tempBehavior = 'Dry continental airmass — enhanced surface heating, large DTR expected.';
@@ -613,6 +631,12 @@ export function classifySynopticPattern(atmospheric, solarData, market) {
     tempBehavior = 'Max capped 2-4°C below clear-sky potential. Models often overpredict.';
     adjustment = -1.0;
     confidence = 0.6;
+    // Shallow BLH + overcast = temperature inversion, cold air trapped at surface
+    if (blh != null && blh < 400) {
+      adjustment = -1.3;
+      confidence = 0.7;
+      tempBehavior += '. Very shallow BLH indicates temperature inversion — surface temperatures further suppressed.';
+    }
   } else if (pressure < 1008 && humidity > 70) {
     pattern = 'LOW_PRESSURE_TROUGH';
     tempBehavior = 'Active low pressure — unsettled conditions, suppressed max temperatures.';
@@ -639,19 +663,306 @@ export function classifySynopticPattern(atmospheric, solarData, market) {
     confidence = 0.2;
   }
 
+  // Deep BLH (>1500m) = well-mixed boundary layer = more predictable temperatures
+  // Only boost confidence when there's an actual adjustment to be confident about
+  if (blh != null && blh > 1500 && Math.abs(adjustment) > 0.01) {
+    confidence = Math.min(0.8, confidence + 0.1);
+  }
+
+  // Fix D: When adjustment is 0, set confidence to 0 — diagnostic only
+  if (Math.abs(adjustment) < 0.01) {
+    confidence = 0;
+  }
+
+  const blhStr = blh != null ? `, BLH: ${blh.toFixed(0)}m` : '';
+
   return {
     factor: 'synoptic_pattern',
     pattern,
     adjustment: +adjustment.toFixed(2),
     confidence: +confidence.toFixed(2),
-    reasoning: `🌍 Synoptic: ${pattern}. ${tempBehavior} (P: ${pressure?.toFixed(0) || '?'} hPa, RH: ${humidity?.toFixed(0) || '?'}%, cloud: ${cloudCover?.toFixed(0) || '?'}%, precip: ${precipProb?.toFixed(0) || '?'}%)`,
-    data: { pattern, pressure, humidity, cloudCover, precipProb, windSpeed, windDir, dewPoint },
+    reasoning: `🌍 Synoptic: ${pattern}. ${tempBehavior} (P: ${pressure?.toFixed(0) || '?'} hPa, RH: ${humidity?.toFixed(0) || '?'}%, cloud: ${cloudCover?.toFixed(0) || '?'}%, precip: ${precipProb?.toFixed(0) || '?'}%${blhStr})`,
+    data: { pattern, pressure, humidity, cloudCover, precipProb, windSpeed, windDir, dewPoint, boundaryLayerHeight: blh },
+  };
+}
+
+// ── Factor 8: Dew Point Depression Ceiling ─────────────────────
+// When dew point is close to air temp (low T-Td), the air is near
+// saturation → evapotranspiration suppressed → latent heat dominates.
+// High T-Td → dry air → more sensible heating → higher max potential.
+export function analyzeDewPointCeiling(atmospheric, market) {
+  if (!atmospheric || atmospheric.dewPoint == null || atmospheric.temperature == null) {
+    return { factor: 'dew_point_ceiling', adjustment: 0, confidence: 0, reasoning: 'No dew point data available', data: null };
+  }
+
+  const temp = atmospheric.temperature;
+  const dewPoint = atmospheric.dewPoint;
+  const depression = atmospheric.dewPointDepression ?? (temp - dewPoint);
+  const rh = atmospheric.humidity; // Add RH to combine mechanisms
+
+  // T-Td < 3°C or RH > 80%: near saturation — strong evaporative cooling cap
+  // T-Td 3-8°C or RH > 70%: moderate moisture — minor cap
+  // T-Td 8-15°C: comfortable dryness — no significant effect
+  // T-Td > 15°C: very dry air — enhanced sensible heating
+  let adjustment = 0;
+  let confidence = 0;
+
+  if (depression < 3 || (rh != null && rh > 80)) {
+    adjustment = -0.5 - (Math.max(0, 3 - depression)) * 0.15; // -0.5 to ~ -0.95°C
+    confidence = 0.5;
+  } else if (depression < 5 || (rh != null && rh > 70)) {
+    adjustment = -0.2; // Slight moisture drag
+    confidence = 0.3;
+  } else if (depression > 18) {
+    adjustment = 0.5; // Very dry — enhanced max
+    confidence = 0.4;
+  } else if (depression > 15) {
+    adjustment = 0.3; // Dry — moderate enhancement
+    confidence = 0.3;
+  }
+
+  if (Math.abs(adjustment) < 0.1) {
+    return {
+      factor: 'dew_point_ceiling',
+      adjustment: 0,
+      confidence: 0,
+      reasoning: `💧 Moisture profile: T-Td=${depression.toFixed(1)}°C${rh != null ? `, RH=${rh.toFixed(0)}%` : ''}. Normal moisture — no ceiling effect.`,
+      data: { temp, dewPoint, depression, rh },
+    };
+  }
+
+  return {
+    factor: 'dew_point_ceiling',
+    adjustment: +adjustment.toFixed(2),
+    confidence: +confidence.toFixed(2),
+    reasoning: `💧 Moisture profile: T-Td=${depression.toFixed(1)}°C${rh != null ? `, RH=${rh.toFixed(0)}%` : ''}. ${adjustment < 0 ? 'Moist air limits sensible heating — evaporative cooling ceiling active (Bowen ratio < 0.5).' : 'Dry air enhances surface heating — sensible heat flux dominant.'}`,
+    data: { temp, dewPoint, depression, rh },
+  };
+}
+
+// ── Factor 9: Urban Heat Island Effect ─────────────────────────
+// Airport stations read warmer than NWP model grid cells due to
+// paved surfaces, reduced vegetation, and anthropogenic heat.
+// This is a systematic underprediction by models for urban stations.
+export function analyzeUrbanHeatIsland(atmospheric, city, market) {
+  if (!city) {
+    return { factor: 'urban_heat_island', adjustment: 0, confidence: 0, reasoning: 'No city data for UHI analysis', data: null };
+  }
+
+  // Per-city UHI correction based on airport station type and urbanization.
+  // Values derived from literature (WRF-UCM studies, MOS bias analyses) and
+  // adjusted for airport/park locations (not city center). polymarket resolves
+  // NYC at Central Park, London at Heathrow.
+  const uhiLookup = {
+    'new york city': { uhi: 0.8, type: 'urban_park' }, // Central Park, high UHI surrounded by skyscrapers
+    'new york':      { uhi: 0.8, type: 'urban_park' },
+    'nyc':           { uhi: 0.8, type: 'urban_park' },
+    'chicago':       { uhi: 0.5, type: 'major_urban_airport' }, // O'Hare
+    'london':        { uhi: 0.4, type: 'suburban_airport' }, // London City Airport (EGLC), Docklands urban area
+    'paris':         { uhi: 0.4, type: 'urban_airport' },
+    'dallas':        { uhi: 0.5, type: 'urban_airport' },
+    'miami':         { uhi: 0.3, type: 'coastal_urban_airport' },
+    'atlanta':       { uhi: 0.5, type: 'major_urban_airport' },
+    'seoul':         { uhi: 0.4, type: 'suburban_airport' },
+    'milan':         { uhi: 0.3, type: 'suburban_airport' },
+    'munich':        { uhi: 0.2, type: 'suburban_airport' },
+    'toronto':       { uhi: 0.3, type: 'suburban_airport' },
+    'sao paulo':     { uhi: 0.5, type: 'urban_airport' },
+    'buenos aires':  { uhi: 0.3, type: 'suburban_airport' },
+    'seattle':       { uhi: 0.2, type: 'suburban_airport' },
+    'wellington':    { uhi: 0.1, type: 'coastal_airport' },
+    'ankara':        { uhi: 0.3, type: 'suburban_airport' },
+    'hong kong':     { uhi: 0.4, type: 'urban_airport' },
+  };
+
+  const cityKey = (city.matchedKey || '').toLowerCase();
+  const uhiEntry = uhiLookup[cityKey];
+
+  if (!uhiEntry) {
+    return { factor: 'urban_heat_island', adjustment: 0, confidence: 0, reasoning: `🏙️ No UHI data for ${city.matchedKey}. Skipped.`, data: null };
+  }
+
+  // UHI is strongest under clear-sky, calm conditions; weaker with clouds/wind
+  let uhiModifier = 1.0;
+  if (atmospheric) {
+    const cloudCover = atmospheric.cloudCover ?? 50;
+    const windSpeed = atmospheric.windSpeed ?? 10;
+    // Clouds reduce UHI (less solar absorption differential)
+    if (cloudCover > 70) uhiModifier *= 0.4;
+    else if (cloudCover > 40) uhiModifier *= 0.7;
+    // Strong wind dilutes UHI through advective mixing
+    if (windSpeed > 15) uhiModifier *= 0.5;
+    else if (windSpeed > 10) uhiModifier *= 0.8;
+  }
+
+  const adjustment = +(uhiEntry.uhi * uhiModifier).toFixed(2);
+  const confidence = adjustment > 0.1 ? 0.35 : 0;
+
+  if (Math.abs(adjustment) < 0.05) {
+    return {
+      factor: 'urban_heat_island',
+      adjustment: 0,
+      confidence: 0,
+      reasoning: `🏙️ UHI suppressed by weather conditions (clouds/wind). Net effect negligible.`,
+      data: { cityKey, baseUHI: uhiEntry.uhi, modifier: uhiModifier, type: uhiEntry.type },
+    };
+  }
+
+  return {
+    factor: 'urban_heat_island',
+    adjustment,
+    confidence,
+    reasoning: `🏙️ Urban Heat Island: +${adjustment.toFixed(1)}°C for ${city.matchedKey} (${uhiEntry.type}, base +${uhiEntry.uhi}°C × ${(uhiModifier * 100).toFixed(0)}% weather modifier). Airport station systematically warmer than NWP grid cell.`,
+    data: { cityKey, baseUHI: uhiEntry.uhi, modifier: uhiModifier, type: uhiEntry.type, adjustment },
+  };
+}
+
+
+// ── Factor 11: Temperature Advection Proxy (Multi-Level Wind) ──
+// Wind speed increase with height indicates lower-troposphere dynamics.
+// Strong backing + warm sector → warm advection → higher max.
+// Strong veering + cold sector → cold advection → lower max.
+export function analyzeTemperatureAdvection(atmospheric, market) {
+  const wind10 = atmospheric?.windSpeed;
+  const wind80 = atmospheric?.windSpeed80m;
+  const windDir = atmospheric?.windDirection;
+
+  if (wind10 == null || wind80 == null) {
+    return { factor: 'temp_advection_proxy', adjustment: 0, confidence: 0, reasoning: 'No multi-level wind data for advection analysis', data: null };
+  }
+
+  // Wind speed ratio: proxy for vertical momentum transport
+  const speedRatio = wind80 / Math.max(wind10, 0.5);
+
+  // Determine thermal sector from wind direction
+  // Very rough hemispheric classification:
+  //   0-90° (N-E): typically continental/cold in winter, variable in summer
+  //   90-180° (E-S): warm sector in N. hemisphere frontal systems
+  //   180-270° (S-W): typically warmest sector
+  //   270-360° (W-N): typically cold/post-frontal
+  const lat = market.lat || 0;
+  const isNorthern = lat >= 0;
+  let thermalSector = 'neutral';
+  if (windDir != null) {
+    if (isNorthern) {
+      if (windDir >= 135 && windDir <= 260) thermalSector = 'warm';
+      else if (windDir >= 300 || windDir <= 60) thermalSector = 'cold';
+    } else {
+      // Southern hemisphere: invert
+      if (windDir >= 300 || windDir <= 80) thermalSector = 'warm';
+      else if (windDir >= 135 && windDir <= 260) thermalSector = 'cold';
+    }
+  }
+
+  let adjustment = 0;
+  let confidence = 0;
+
+  // Strong speed increase with height + warm sector = warm advection
+  if (speedRatio > 1.8 && thermalSector === 'warm') {
+    adjustment = 0.4;
+    confidence = 0.35;
+  } else if (speedRatio > 1.5 && thermalSector === 'warm') {
+    adjustment = 0.2;
+    confidence = 0.25;
+  }
+  // Strong speed increase + cold sector = cold advection
+  else if (speedRatio > 1.8 && thermalSector === 'cold') {
+    adjustment = -0.4;
+    confidence = 0.35;
+  } else if (speedRatio > 1.5 && thermalSector === 'cold') {
+    adjustment = -0.2;
+    confidence = 0.25;
+  }
+
+  // Set them to 0 since NWP corrects advection itself, we only want to show diagnostic string
+  const diagnosticAdj = adjustment;
+  adjustment = 0;
+  confidence = 0;
+
+  if (Math.abs(diagnosticAdj) < 0.1) {
+    return {
+      factor: 'temp_advection_proxy',
+      adjustment: 0,
+      confidence: 0,
+      reasoning: `🌀 Wind profile: 10m=${wind10?.toFixed(0)}mph, 80m=${wind80?.toFixed(0)}mph (ratio ${speedRatio.toFixed(1)}×). Thermal sector: ${thermalSector}. No significant advection signal.`,
+      data: { wind10, wind80, speedRatio, windDir, thermalSector },
+    };
+  }
+
+  return {
+    factor: 'temp_advection_proxy',
+    adjustment: 0,
+    confidence: 0,
+    reasoning: `🌀 Temperature advection (diagnostic): wind increases ${speedRatio.toFixed(1)}× from 10m→80m, ${thermalSector} sector (dir ${windDir?.toFixed(0) || '?'}°). Typical advection effect handled by NWP models.`,
+    data: { wind10, wind80, speedRatio, windDir, thermalSector },
+  };
+}
+
+// ── Factor 12: Forecast Trajectory Momentum ────────────────────
+// If the forecast has been consistently trending warmer or cooler
+// over the last 3-5 model runs, this trend tends to continue.
+// Models have inertia — they don't jump discontinuously.
+export function analyzeTrajectoryMomentum(trajectory, market) {
+  if (!trajectory?.convergence || !trajectory?.runs || trajectory.runs.length < 2) {
+    return { factor: 'trajectory_momentum', adjustment: 0, confidence: 0, reasoning: 'Insufficient trajectory data (need ≥2 model runs)', data: null };
+  }
+
+  const conv = trajectory.convergence;
+  const trendDelta = conv.trendDelta || 0;
+  const isConverging = conv.isConverging;
+  const stdDev = conv.stdDev || 0;
+  const runCount = trajectory.runs.length;
+
+  let adjustment = 0;
+  let confidence = 0;
+
+  // Strong warming trend: recent runs consistently warmer than older runs
+  if (trendDelta > 0.5) {
+    adjustment = Math.min(0.5, trendDelta * 0.3); // Scale by trend, cap at 0.5°C
+    confidence = isConverging ? 0.45 : 0.25;
+  } else if (trendDelta > 0.3) {
+    adjustment = 0.2;
+    confidence = isConverging ? 0.35 : 0.2;
+  }
+  // Strong cooling trend
+  else if (trendDelta < -0.5) {
+    adjustment = Math.max(-0.5, trendDelta * 0.3);
+    confidence = isConverging ? 0.45 : 0.25;
+  } else if (trendDelta < -0.3) {
+    adjustment = -0.2;
+    confidence = isConverging ? 0.35 : 0.2;
+  }
+
+  // Penalize confidence when models are diverging (not converging)
+  if (!isConverging && stdDev > 1.5) {
+    confidence *= 0.5;
+  }
+
+  // Boost confidence with more data points
+  if (runCount >= 4) confidence = Math.min(0.6, confidence * 1.1);
+
+  if (Math.abs(adjustment) < 0.1) {
+    return {
+      factor: 'trajectory_momentum',
+      adjustment: 0,
+      confidence: 0,
+      reasoning: `📈 Forecast trajectory: ${conv.trend || 'stable'} (Δ${trendDelta > 0 ? '+' : ''}${trendDelta.toFixed(1)}°C over ${runCount} runs, σ=${stdDev.toFixed(1)}°C). No momentum signal.`,
+      data: { trendDelta, isConverging, stdDev, runCount, trend: conv.trend },
+    };
+  }
+
+  return {
+    factor: 'trajectory_momentum',
+    adjustment: +adjustment.toFixed(2),
+    confidence: +confidence.toFixed(2),
+    reasoning: `📈 Forecast momentum: ${conv.trend} trend Δ${trendDelta > 0 ? '+' : ''}${trendDelta.toFixed(1)}°C over ${runCount} runs (${isConverging ? 'converging' : 'diverging'}, σ=${stdDev.toFixed(1)}°C). Models trending ${adjustment > 0 ? 'warmer' : 'cooler'} — likely to continue.`,
+    data: { trendDelta, isConverging, stdDev, runCount, trend: conv.trend },
   };
 }
 
 // ── Run All Factors ────────────────────────────────────────────
 /**
- * Run all 7 advanced analysis factors and return results.
+ * Run all 12 advanced analysis factors and return results.
  *
  * @param {Object} params
  * @param {Object[]} params.hourlyCurve — multi-model hourly temperature curves
@@ -660,9 +971,10 @@ export function classifySynopticPattern(atmospheric, solarData, market) {
  * @param {Object} params.atmospheric — processed atmospheric conditions
  * @param {Object} params.city — resolved city info
  * @param {Object} params.market — market metadata
+ * @param {Object} [params.trajectory] — forecast trajectory data
  * @returns {Object} { factors: [...], netAdjustment, netConfidence, dominantFactor }
  */
-export function runAllAdvancedFactors({ hourlyCurve, soilData, solarData, atmospheric, city, market }) {
+export function runAllAdvancedFactors({ hourlyCurve, soilData, solarData, atmospheric, city, market, trajectory }) {
   const factors = [];
 
   // Run each factor, catching errors so one failure doesn't break all
@@ -674,6 +986,7 @@ export function runAllAdvancedFactors({ hourlyCurve, soilData, solarData, atmosp
     }
   };
 
+  // Original 7 factors
   factors.push(safeRun(analyzeMidnightCarryover, hourlyCurve, soilData, market));
   factors.push(safeRun(analyzeSolarBudget, solarData, market));
   factors.push(safeRun(analyzeThermalInertia, soilData, market));
@@ -682,11 +995,20 @@ export function runAllAdvancedFactors({ hourlyCurve, soilData, solarData, atmosp
   factors.push(safeRun(analyzeWindRegime, atmospheric, hourlyCurve, city, market));
   factors.push(safeRun(classifySynopticPattern, atmospheric, solarData, market));
 
-  // Compute net adjustment (confidence-weighted sum)
+  // New PhD-level factors (8-12)
+  factors.push(safeRun(analyzeDewPointCeiling, atmospheric, market));
+  factors.push(safeRun(analyzeUrbanHeatIsland, atmospheric, city, market));
+  factors.push(safeRun(analyzeTemperatureAdvection, atmospheric, market));
+  factors.push(safeRun(analyzeTrajectoryMomentum, trajectory, market));
+
+  // Fix A: Compute net adjustment as confidence-weighted SUM (capped),
+  // NOT weighted mean. Independent physical mechanisms should stack — 
+  // radiation deficit + onshore wind + humidity ceiling are additive effects.
   const activeFx = factors.filter(f => Math.abs(f.adjustment) > 0.01 && f.confidence > 0.1);
-  const totalConfWeight = activeFx.reduce((s, f) => s + f.confidence, 0);
-  const netAdjustment = totalConfWeight > 0
-    ? activeFx.reduce((s, f) => s + f.adjustment * f.confidence, 0) / totalConfWeight
+  const netAdjustment = activeFx.length > 0
+    ? Math.max(-3.0, Math.min(3.0,
+        activeFx.reduce((s, f) => s + f.adjustment * f.confidence, 0)
+      ))
     : 0;
 
   // Overall confidence: geometric mean of active factor confidences (penalizes disagreement)
@@ -696,7 +1018,7 @@ export function runAllAdvancedFactors({ hourlyCurve, soilData, solarData, atmosp
 
   // Dominant factor: the one with largest absolute weighted impact
   const dominantFactor = activeFx.length > 0
-    ? activeFx.sort((a, b) => Math.abs(b.adjustment * b.confidence) - Math.abs(a.adjustment * a.confidence))[0]?.factor
+    ? [...activeFx].sort((a, b) => Math.abs(b.adjustment * b.confidence) - Math.abs(a.adjustment * a.confidence))[0]?.factor
     : null;
 
   console.log(`[FACTORS] Net adjustment: ${netAdjustment > 0 ? '+' : ''}${netAdjustment.toFixed(2)}°C (conf: ${(netConfidence * 100).toFixed(0)}%, dominant: ${dominantFactor || 'none'}, ${activeFx.length}/${factors.length} active)`);
